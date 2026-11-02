@@ -12,3 +12,5 @@ build/
 .vscode/
 .figma/
 .figaro/
+playwright-report/
+test-results/

@@ -1,14 +1,16 @@
-import Brand from "../common/Brand"
-import { navItems } from "../../data/navigation"
-import type { Page } from "../../types/app"
-import { assetUrl } from "../../utils/assets"
+import Brand from '../common/Brand'
+import { navItems } from '../../data/navigation'
+import type { Page } from '../../types/app'
+import { assetUrl } from '../../utils/assets'
 
 export default function Navigation({
   page,
   onChange,
+  userName,
 }: {
   page: Page
   onChange: (page: Page) => void
+  userName: string
 }) {
   return (
     <>
@@ -18,8 +20,8 @@ export default function Navigation({
           <nav aria-label="주요 메뉴">
             {navItems.map((item) => (
               <button
-                className={page === item.id ? "active" : ""}
-                aria-current={page === item.id ? "page" : undefined}
+                className={page === item.id ? 'active' : ''}
+                aria-current={page === item.id ? 'page' : undefined}
                 key={item.id}
                 onClick={() => onChange(item.id)}
               >
@@ -28,16 +30,16 @@ export default function Navigation({
               </button>
             ))}
           </nav>
-          <button className="profile-pill" onClick={() => onChange("mypage")}>
-            이솔민 기사님
+          <button className="profile-pill" onClick={() => onChange('mypage')}>
+            {userName}
           </button>
         </div>
       </header>
       <nav className="mobile-nav" aria-label="주요 메뉴">
         {navItems.map((item) => (
           <button
-            className={page === item.id ? "active" : ""}
-            aria-current={page === item.id ? "page" : undefined}
+            className={page === item.id ? 'active' : ''}
+            aria-current={page === item.id ? 'page' : undefined}
             key={item.id}
             onClick={() => onChange(item.id)}
           >

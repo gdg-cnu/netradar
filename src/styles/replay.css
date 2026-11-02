@@ -1,0 +1,222 @@
+.history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+.history-heading h1 {
+  margin-top: 6px;
+  font-size: 30px;
+  font-weight: 800;
+}
+.history-heading p {
+  margin-top: 8px;
+  color: #666;
+  font-size: 14px;
+}
+.history-example-button {
+  flex-shrink: 0;
+  padding: 11px 14px;
+  border: 1px solid #ddd;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.history-example-button[aria-pressed='true'] {
+  color: #ad3d0b;
+  border-color: #f9b18b;
+  background: #fff1e9;
+}
+.history-demo-note {
+  margin-bottom: 26px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.history-layout {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 32px;
+}
+.history-calendar {
+  min-width: 0;
+}
+.history-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+.history-month-nav h2 {
+  color: #c13f0b;
+  font-size: 20px;
+  font-weight: 800;
+}
+.history-month-nav button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  font-size: 28px;
+}
+.history-calendar .calendar-grid {
+  margin-top: 6px;
+}
+.history-calendar .calendar-grid button.selected {
+  width: 35px;
+  height: 35px;
+  margin: 7.5px auto;
+}
+.history-calendar .calendar-grid button:disabled {
+  cursor: default;
+}
+.history-calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 18px;
+  color: #666;
+  font-size: 11px;
+}
+.history-calendar-legend span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--orange);
+}
+.history-records {
+  min-width: 0;
+}
+.history-records .record-summary h2 {
+  margin: 9px 0;
+  font-size: 23px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.history-records .record-summary h2 em {
+  color: #e84912;
+  font-style: normal;
+}
+.history-ride-grid {
+  display: grid;
+  gap: 15px;
+}
+.history-ride-card {
+  padding: 21px;
+  border: 1px solid #ffc6b5;
+  border-radius: 12px;
+}
+.history-ride-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.history-ride-card h3 {
+  font-size: 17px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.history-ride-card header span {
+  flex-shrink: 0;
+  color: #b64219;
+  font-size: 11px;
+}
+.history-ride-card > p {
+  margin: 8px 0 16px;
+  color: #666;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.history-ride-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.history-ride-card dl > div {
+  padding: 11px;
+  border-radius: 8px;
+  background: #fff5ef;
+}
+.history-ride-card dt {
+  color: #555;
+  font-size: 11px;
+}
+.history-ride-card dd {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 800;
+}
+.history-ride-card .history-profit {
+  background: #fff;
+  border: 1px solid #ffb69a;
+}
+.history-profit dd {
+  color: #d44512;
+}
+.history-empty,
+.history-error {
+  display: grid;
+  gap: 16px;
+  padding: 26px;
+  border-radius: 14px;
+  background: #f7f7f7;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.history-empty button,
+.history-error button {
+  justify-self: start;
+  padding: 11px 17px;
+  border-radius: 9px;
+  color: #fff;
+  background: var(--button);
+  font-weight: 700;
+}
+.history-error {
+  color: #96361e;
+  background: #fff1ed;
+}
+@media (max-width: 1000px) {
+  .history-layout {
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 22px;
+  }
+}
+@media (max-width: 767px) {
+  .history-page {
+    padding: 24px 18px 32px;
+  }
+  .history-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .history-heading h1 {
+    font-size: 25px;
+  }
+  .history-heading p {
+    font-size: 13px;
+  }
+  .history-demo-note {
+    margin-bottom: 18px;
+  }
+  .history-layout {
+    display: block;
+  }
+  .history-calendar {
+    padding: 16px 6px 22px;
+  }
+  .history-records {
+    padding-top: 24px;
+  }
+  .history-records .record-summary h2 {
+    font-size: 21px;
+  }
+  .history-ride-card {
+    padding: 17px;
+  }
+}

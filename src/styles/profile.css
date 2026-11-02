@@ -1,0 +1,327 @@
+.profile-page {
+  max-width: 1120px;
+}
+.profile-page-heading {
+  margin-bottom: 24px;
+}
+.profile-page-heading h1 {
+  margin: 6px 0;
+  font-size: 30px;
+  font-weight: 800;
+}
+.profile-hint {
+  color: #666;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 24px;
+  align-items: start;
+}
+.profile-panel {
+  min-width: 0;
+  padding: 24px;
+}
+.profile-panel h2 {
+  font-size: 19px;
+  font-weight: 800;
+}
+.profile-identity {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.profile-identity .avatar {
+  flex-shrink: 0;
+}
+.profile-identity p {
+  margin-top: 4px;
+  color: #666;
+  font-size: 13px;
+}
+.profile-form,
+.favorite-dialog form {
+  display: grid;
+  gap: 16px;
+}
+.profile-form label,
+.favorite-dialog label {
+  display: grid;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.profile-form input,
+.profile-form select,
+.favorite-dialog input,
+.favorite-dialog select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #bbb;
+  border-radius: 9px;
+  background: #fff;
+  font-weight: 400;
+}
+.profile-form input:focus,
+.profile-form select:focus,
+.favorite-dialog input:focus,
+.favorite-dialog select:focus {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+.profile-history-link {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  margin-top: 22px;
+  padding: 16px 0 0;
+  border-top: 1px solid #eee;
+  font-size: 14px;
+  font-weight: 700;
+}
+.profile-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.profile-text-button {
+  padding: 8px 0 8px 8px;
+  color: #bd3a0c;
+  font-size: 13px;
+  font-weight: 700;
+}
+.favorite-list {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.favorite-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #eee;
+}
+.favorite-list li:last-child {
+  border-bottom: 0;
+}
+.favorite-destination {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.favorite-destination strong,
+.favorite-destination span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.favorite-destination strong {
+  font-size: 15px;
+}
+.favorite-destination span {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #666;
+}
+.favorite-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.favorite-actions button {
+  min-height: 38px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f7f7f7;
+  font-size: 12px;
+}
+.profile-settings {
+  grid-column: 1 / -1;
+}
+.profile-setting-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0;
+  border-bottom: 1px solid #eee;
+}
+.profile-setting-row strong {
+  font-size: 14px;
+}
+.profile-setting-row p {
+  max-width: 600px;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #666;
+}
+.profile-setting-row input[type='checkbox'] {
+  accent-color: var(--orange);
+  width: 23px;
+  height: 23px;
+  flex-shrink: 0;
+}
+.profile-secondary {
+  min-height: 40px;
+  padding: 8px 13px;
+  border: 1px solid #d6d6d6;
+  border-radius: 9px;
+  background: #fff;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+.profile-setting-link {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  padding: 19px 0;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+}
+.profile-logout {
+  color: #a72d10;
+  border: 0;
+  padding-bottom: 0;
+}
+.profile-error,
+.profile-notice {
+  padding: 12px 15px;
+  margin: 10px 0 18px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.profile-error {
+  color: #922b12;
+  background: #fff1ed;
+}
+.profile-error button {
+  margin-left: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.profile-notice {
+  color: #28523e;
+  background: #edf8f1;
+}
+.profile-empty {
+  padding: 25px 0;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.favorite-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 24px;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  overflow-y: auto;
+  background: white;
+  color: #111;
+  box-shadow: 0 15px 60px #0003;
+}
+.favorite-dialog::backdrop {
+  background: #0008;
+}
+.favorite-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.favorite-dialog header h2 {
+  font-size: 20px;
+  font-weight: 800;
+}
+.favorite-dialog header > button {
+  width: 36px;
+  height: 36px;
+  font-size: 28px;
+}
+.favorite-search-results {
+  padding: 0;
+  list-style: none;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.favorite-search-results button {
+  width: 100%;
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+.favorite-search-results strong,
+.favorite-search-results span {
+  display: block;
+}
+.favorite-search-results strong {
+  font-size: 14px;
+}
+.favorite-search-results span {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666;
+}
+.favorite-selected {
+  padding: 10px;
+  border-radius: 8px;
+  background: #fff1e9;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.profile-page button:disabled,
+.favorite-dialog button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+@media (max-width: 767px) {
+  .profile-page {
+    padding: 24px 18px 32px;
+  }
+  .profile-page-heading h1 {
+    font-size: 25px;
+  }
+  .profile-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .profile-panel {
+    padding: 19px;
+  }
+  .profile-settings {
+    grid-column: auto;
+  }
+  .favorite-list li {
+    gap: 7px;
+  }
+  .favorite-actions {
+    flex-direction: column;
+  }
+  .favorite-actions button {
+    min-height: 32px;
+  }
+  .profile-setting-row {
+    gap: 12px;
+  }
+}

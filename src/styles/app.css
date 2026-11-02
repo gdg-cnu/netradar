@@ -1,0 +1,147 @@
+@layer base {
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 3px solid #e65b24;
+    outline-offset: 3px;
+  }
+}
+.demo-banner {
+  padding: 7px 16px;
+  background: #fff0e8;
+  color: #71330f;
+  text-align: center;
+  font-size: 12px;
+  border-bottom: 1px solid #f8d6c6;
+}
+.app-loading {
+  min-height: 40vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: #666;
+}
+.app-alert {
+  padding: 12px 20px;
+  background: #fff4d0;
+  color: #633900;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.app-alert button {
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 12px;
+  z-index: 1500;
+  padding: 12px;
+  background: #fff;
+  color: #111;
+}
+.skip-link:focus {
+  top: 10px;
+}
+.consent-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 28px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.consent-field input {
+  flex-shrink: 0;
+  margin-top: 4px;
+  width: 17px;
+  height: 17px;
+  accent-color: var(--orange);
+}
+.terms-links {
+  display: flex;
+  gap: 14px;
+  margin: 8px 0 2px 27px;
+  font-size: 12px;
+  color: #87482a;
+  text-decoration: underline;
+}
+.login-panel .kakao-button {
+  margin-top: 24px;
+}
+.demo-login {
+  margin-top: 12px;
+}
+.login-panel > .login-hint {
+  display: block;
+  font-size: 12px;
+  margin-top: 14px;
+  line-height: 1.6;
+}
+.form-error {
+  color: #a32512 !important;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 12px;
+}
+.terms-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  padding: 28px;
+  background: #fff;
+  color: #222;
+  border: 0;
+  border-radius: 16px;
+}
+.terms-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.terms-dialog h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 16px;
+}
+.terms-dialog h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 20px 0 8px;
+}
+.terms-dialog p {
+  font-size: 14px;
+  line-height: 1.8;
+}
+.terms-dialog .primary-button {
+  margin-top: 24px;
+}
+@media (max-width: 767px) {
+  .login-page .login-visual {
+    height: auto;
+    min-height: 30dvh;
+    padding: 32px 24px;
+  }
+  .login-page .login-panel {
+    height: auto;
+    min-height: 60dvh;
+    padding: 24px;
+  }
+  .login-panel .consent-field {
+    margin-top: 0;
+  }
+  .demo-banner {
+    font-size: 11px;
+  }
+  .mobile-nav {
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+}
