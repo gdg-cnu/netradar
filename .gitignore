@@ -19,3 +19,12 @@ backend/.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+# Local environment variables
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python virtual environments
+.venv/
+backend/.venv/

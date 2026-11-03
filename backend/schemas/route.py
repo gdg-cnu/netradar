@@ -1,11 +1,12 @@
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
 class Coordinates(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
 
 
 class Place(Coordinates):
@@ -39,3 +40,11 @@ class RoutePlan(RouteRequest):
     direct: RouteMetrics
     recommended: RouteMetrics
     stops: list[RouteStop]
+
+    # 지도 경로선 좌표: [위도, 경도]
+    directPath: list[tuple[float, float]] = Field(
+        default_factory=list
+    )
+    recommendedPath: list[tuple[float, float]] = Field(
+        default_factory=list
+    )
