@@ -1,4 +1,6 @@
 import type { RoutePlan } from '../../types/route'
+import { routeEstimateNotice } from '../../services/routes'
+import RouteMapPanel from './RouteMapPanel'
 
 interface Props {
   plan: RoutePlan
@@ -30,12 +32,9 @@ export default function RouteResults({
           <br />
           수익을 더하는 동선
         </h1>
-        <p>
-          {plan.demo
-            ? '실제 교통·수요와 연결되지 않은 시뮬레이션입니다. 실제 길 안내로 사용하지 마세요.'
-            : '예상 금액과 소요 시간은 실제 운행 상황에 따라 달라질 수 있어요.'}
-        </p>
+        <p>{routeEstimateNotice(plan.demo)}</p>
       </div>
+      <RouteMapPanel plan={plan} />
       <div className="route-comparison" aria-label="직행과 추천 동선 비교">
         <div>
           <h2>바로 가는 동선</h2>

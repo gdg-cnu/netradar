@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { searchPlaces } from '../../services/routes'
+import {
+  searchPlaces,
+  getPlaceSearchSource,
+  placeSearchNotice,
+  placeSearchEmptyMessage,
+} from '../../services/routes'
 import type { Place } from '../../types/route'
 
 export default function PlaceSearch({
@@ -11,6 +16,7 @@ export default function PlaceSearch({
   onSelect: (place: Place) => void
   disabled?: boolean
 }) {
+  const source = getPlaceSearchSource()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Place[]>([])
   const [pending, setPending] = useState(false)
@@ -57,6 +63,7 @@ export default function PlaceSearch({
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
+      <p className="route-search-source">{placeSearchNotice(source)}</p>
       <div aria-live="polite">
         {pending ? (
           <p>검색 중…</p>
@@ -68,7 +75,7 @@ export default function PlaceSearch({
             </button>
           </div>
         ) : query.trim().length >= 2 && results.length === 0 ? (
-          <p>검색 결과가 없어요. 다른 검색어를 입력해 주세요.</p>
+          <p>{placeSearchEmptyMessage(source)}</p>
         ) : null}
       </div>
       {results.length > 0 && (

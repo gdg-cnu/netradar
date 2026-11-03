@@ -8,6 +8,38 @@ export interface Place extends Coordinates {
   address: string
 }
 export type Detour = 'little' | 'normal' | 'much'
+// Keep display limits and demo calculation aligned with backend DETOUR_RATIOS.
+export const DETOUR_OPTIONS: ReadonlyArray<{
+  value: Detour
+  label: string
+  percent: number
+  demoStops: number
+}> = [
+  { value: 'little', label: '조금', percent: 15, demoStops: 1 },
+  { value: 'normal', label: '보통', percent: 30, demoStops: 2 },
+  { value: 'much', label: '많이', percent: 50, demoStops: 3 },
+]
+export function getDetourOption(detour: Detour) {
+  return DETOUR_OPTIONS.find((option) => option.value === detour)!
+}
+/** Backend geometry uses [latitude, longitude], not GeoJSON's reversed order. */
+export type RoutePoint = [lat: number, lng: number]
+export type RoutePath = RoutePoint[]
+export function isRoutePath(value: unknown): value is RoutePath {
+  return (
+    Array.isArray(value) &&
+    (value.length === 0 || value.length >= 2) &&
+    value.every(
+      (point) =>
+        Array.isArray(point) &&
+        point.length === 2 &&
+        Number.isFinite(point[0]) &&
+        Math.abs(point[0]) <= 90 &&
+        Number.isFinite(point[1]) &&
+        Math.abs(point[1]) <= 180,
+    )
+  )
+}
 export interface RouteMetrics {
   minutes: number
   kilometers: number
@@ -30,6 +62,9 @@ export interface RoutePlan extends RouteRequest {
   direct: RouteMetrics
   recommended: RouteMetrics
   stops: RouteStop[]
+  // Optional for saved legacy/demo plans; an empty path means geometry is unavailable.
+  directPath?: RoutePath
+  recommendedPath?: RoutePath
 }
 export type DrivePhase =
   'idle' | 'travelling' | 'waiting' | 'onboard' | 'needs-route' | 'finished'
@@ -156,6 +191,8 @@ export function isRoutePlan(value: unknown): value is RoutePlan {
     (p.excludeStopIds === undefined ||
       (Array.isArray(p.excludeStopIds) &&
         p.excludeStopIds.every((id) => typeof id === 'string'))) &&
+    (p.directPath === undefined || isRoutePath(p.directPath)) &&
+    (p.recommendedPath === undefined || isRoutePath(p.recommendedPath)) &&
     isMetrics(p.direct) &&
     isMetrics(p.recommended) &&
     Array.isArray(p.stops) &&

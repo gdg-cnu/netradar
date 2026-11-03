@@ -715,3 +715,42 @@
     transition: none !important;
   }
 }
+
+.forecast-source-notice {
+  margin: -9px 0 20px;
+  padding: 11px 14px;
+  border: 1px solid #e5ded6;
+  border-radius: 9px;
+  background: #fffaf3;
+  color: #80644d;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.forecast-zone-source {
+  display: block;
+  margin-top: 4px;
+  color: #8b6a4f;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.forecast-detail-source {
+  margin-top: 7px;
+  color: #8b6a4f;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.forecast-detail-source[data-provenance='server-demo'],
+.forecast-zone-source[data-provenance='server-demo'] {
+  color: #a75622;
+}
+.forecast-source-counts {
+  display: block;
+  margin-top: 5px;
+  line-height: 1.7;
+}
+.forecast-popup .leaflet-popup-content small {
+  display: block;
+  margin-top: 6px;
+  color: #8b6a4f;
+  font-size: 10px;
+}

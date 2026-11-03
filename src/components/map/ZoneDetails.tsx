@@ -1,5 +1,9 @@
 import { useId } from 'react'
-import { formatWon } from '../../services/forecast'
+import {
+  forecastSourceLabel,
+  forecastSourceNotice,
+  formatWon,
+} from '../../services/forecast'
 import { navigateTo } from '../../utils/navigation'
 import type {
   ForecastHorizon,
@@ -11,10 +15,9 @@ interface ZoneDetailsProps {
   zone: RankedForecastZone
   metric: ForecastMetric
   horizon: ForecastHorizon
-  demo: boolean
 }
 
-export default function ZoneDetails({ zone, metric, horizon, demo }: ZoneDetailsProps) {
+export default function ZoneDetails({ zone, metric, horizon }: ZoneDetailsProps) {
   const chartId = useId()
   const { current } = zone
   const total = Math.max(current.grossRevenue, 1)
@@ -42,6 +45,9 @@ export default function ZoneDetails({ zone, metric, horizon, demo }: ZoneDetails
         </span>
       </div>
       <h2 id="zone-detail-title">{zone.name}</h2>
+      <p className="forecast-detail-source" data-provenance={zone.provenance}>
+        {forecastSourceLabel(zone.provenance)}
+      </p>
       <div className="forecast-main-value">
         <span>{metric === 'hourly' ? '예상 순시급' : '예상 승객 수'}</span>
         <strong>
@@ -172,11 +178,7 @@ export default function ZoneDetails({ zone, metric, horizon, demo }: ZoneDetails
       >
         이 구역으로 동선 추천 <span aria-hidden="true">→</span>
       </button>
-      <p className="forecast-disclaimer">
-        {demo
-          ? '시연용 예측 데이터입니다. 실제 수요·수익을 나타내지 않습니다.'
-          : '예측은 수요와 교통 상황에 따라 달라지며, 실제 수익을 보장하지 않습니다.'}
-      </p>
+      <p className="forecast-disclaimer">{forecastSourceNotice(zone.provenance)}</p>
     </aside>
   )
 }

@@ -4,7 +4,12 @@ import ZoneDetails from '../components/map/ZoneDetails'
 import { useForecast } from '../hooks/useForecast'
 import { useLocation } from '../hooks/useLocation'
 import { isDemoMode } from '../services/api'
-import { formatWon, rankForecastZones } from '../services/forecast'
+import {
+  forecastSourceLabel,
+  forecastSourceNotice,
+  formatWon,
+  rankForecastZones,
+} from '../services/forecast'
 import type { ForecastHorizon, ForecastMetric } from '../types/forecast'
 import '../styles/map.css'
 
@@ -32,7 +37,8 @@ export default function MapPage() {
   const [searchNotice, setSearchNotice] = useState('')
   const { data, loading, error, retry } = useForecast(metric, horizon)
   const { position, status, error: locationError, requestLocation } = useLocation()
-  const demo = isDemoMode()
+  const localDemo = isDemoMode()
+  const provenance = data?.provenance ?? (localDemo ? 'local-demo' : 'server-unspecified')
   const zones = useMemo(
     () => rankForecastZones(data?.zones ?? [], metric, horizon),
     [data, metric, horizon],
@@ -52,10 +58,18 @@ export default function MapPage() {
           <h1>어디에서 운행하면 좋을까요?</h1>
           <p>구역별 예상 수입과 수요를 비교해 보세요.</p>
         </div>
-        <span className={`forecast-source-badge ${demo ? 'demo' : ''}`}>
-          {demo ? 'DEMO · 예시 데이터' : '서버 예측 데이터'}
+        <span
+          className={`forecast-source-badge ${provenance.includes('demo') || provenance === 'mixed' ? 'demo' : ''}`}
+          data-provenance={provenance}
+        >
+          {data || localDemo ? forecastSourceLabel(provenance) : '서버 데이터 연결'}
         </span>
       </header>
+      {data && (
+        <p className="forecast-source-notice" role="status" data-provenance={provenance}>
+          {forecastSourceNotice(provenance)}
+        </p>
+      )}
       <div className="forecast-layout">
         <section className="forecast-explorer" aria-label="지역별 예측 탐색">
           <div className="forecast-toolbar">
@@ -212,6 +226,12 @@ export default function MapPage() {
                     <span className="forecast-list-rank">{zone.rank}</span>
                     <span className="forecast-list-name">
                       <strong>{zone.name}</strong>
+                      <span
+                        className="forecast-zone-source"
+                        data-provenance={zone.provenance}
+                      >
+                        {forecastSourceLabel(zone.provenance)}
+                      </span>
                       <small>
                         {metric === 'hourly'
                           ? `예상 승객 ${zone.current.passengers}명/시간`
@@ -230,15 +250,25 @@ export default function MapPage() {
             </ol>
             {data && (
               <p className="forecast-data-note">
-                {demo
-                  ? '서울 7개 구역의 시연용 예측 · 실제 수요 아님'
-                  : `예측 기준 ${new Date(data.generatedAt).toLocaleString('ko-KR')}`}
+                {localDemo
+                  ? `${zones.length}개 구역 · 로컬 시연용 예측`
+                  : `${zones.length}개 구역 · 서버 응답 시각 ${new Date(data.generatedAt).toLocaleString('ko-KR')}`}
+                {provenance === 'mixed' && (
+                  <span className="forecast-source-counts">
+                    {Array.from(new Set(zones.map((zone) => zone.provenance)))
+                      .map(
+                        (source) =>
+                          `${forecastSourceLabel(source)} ${zones.filter((zone) => zone.provenance === source).length}개`,
+                      )
+                      .join(' / ')}
+                  </span>
+                )}
               </p>
             )}
           </section>
         </section>
         {selected ? (
-          <ZoneDetails zone={selected} metric={metric} horizon={horizon} demo={demo} />
+          <ZoneDetails zone={selected} metric={metric} horizon={horizon} />
         ) : (
           <aside className="forecast-details forecast-details-empty">
             <h2>지역별 예측 상세</h2>

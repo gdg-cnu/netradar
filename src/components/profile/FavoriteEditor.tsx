@@ -1,5 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { searchPlaces, type Place } from '../../services/routes'
+import {
+  getPlaceSearchSource,
+  placeSearchEmptyMessage,
+  placeSearchNotice,
+  searchPlaces,
+  type Place,
+} from '../../services/routes'
 import type { FavoritePlace } from '../../types/profile'
 
 export default function FavoriteEditor({
@@ -13,8 +19,10 @@ export default function FavoriteEditor({
   onClose: () => void
   saving: boolean
 }) {
+  const source = getPlaceSearchSource()
   const dialog = useRef<HTMLDialogElement>(null)
   const titleId = useId()
+  const sourceId = useId()
   const [label, setLabel] = useState(favorite?.label ?? '')
   const [kind, setKind] = useState<FavoritePlace['kind']>(favorite?.kind ?? 'custom')
   const [query, setQuery] = useState(favorite?.address ?? '')
@@ -141,6 +149,7 @@ export default function FavoriteEditor({
           주소 또는 장소 검색
           <input
             value={query}
+            aria-describedby={sourceId}
             onChange={(event) => {
               request.current?.abort()
               setLoading(false)
@@ -152,6 +161,9 @@ export default function FavoriteEditor({
             placeholder="예: 강남역, 잠실"
           />
         </label>
+        <p className="profile-hint" id={sourceId}>
+          {placeSearchNotice(source)}
+        </p>
         <button
           className="profile-secondary"
           type="button"
@@ -181,8 +193,8 @@ export default function FavoriteEditor({
           </ul>
         )}
         {searched && results.length === 0 && !selected && (
-          <p className="profile-hint">
-            검색 결과가 없습니다. 다른 주소나 장소 이름을 입력해주세요.
+          <p className="profile-hint" role="status">
+            {placeSearchEmptyMessage(source)}
           </p>
         )}
         {selected && (

@@ -1,5 +1,5 @@
-import { apiRequest } from './api'
-import { readStored, writeStored } from '../utils/storage'
+import { ApiError, apiRequest } from './api'
+import { getStorageScope, readStored, writeStored } from '../utils/storage'
 import type { FavoritePlace, UserProfile } from '../types/profile'
 
 const favoriteKinds = ['home', 'lpg', 'ev', 'custom']
@@ -71,15 +71,44 @@ function defaultProfile(): UserProfile {
 }
 
 export async function getProfile(): Promise<UserProfile> {
+  const account = getStorageScope()
   const profile = await apiRequest<UserProfile>('/me/profile', {}, () => {
-    const stored = readStored<unknown>('profile', null)
+    const stored = readStored<unknown>('profile', null, undefined, account)
     return isProfile(stored) ? stored : defaultProfile()
   })
   if (!isProfile(profile)) throw new Error('프로필 응답 형식을 확인할 수 없습니다.')
   return profile
 }
 
+export type ProfileSettings =
+  | { kind: 'registered'; profile: UserProfile }
+  | { kind: 'unregistered'; draft: UserProfile }
+
+/** A missing profile is an editable draft, never an implicitly saved profile. */
+export async function getProfileForSettings(
+  userName?: string,
+  load: () => Promise<UserProfile> = getProfile,
+): Promise<ProfileSettings> {
+  try {
+    const profile = await load()
+    if (!isProfile(profile)) throw new Error('프로필 응답 형식을 확인할 수 없습니다.')
+    return { kind: 'registered', profile }
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 404) throw error
+    return {
+      kind: 'unregistered',
+      draft: {
+        name: typeof userName === 'string' ? userName.trim().slice(0, 30) : '',
+        vehicleType: 'LPG',
+        notifications: true,
+        favorites: [],
+      },
+    }
+  }
+}
+
 export async function saveProfile(profile: UserProfile): Promise<UserProfile> {
+  const account = getStorageScope()
   const normalized = {
     ...profile,
     name: profile.name.trim(),
@@ -97,11 +126,12 @@ export async function saveProfile(profile: UserProfile): Promise<UserProfile> {
       body: JSON.stringify(normalized),
     },
     () => {
-      writeStored('profile', normalized)
+      writeStored('profile', normalized, account)
       return normalized
     },
   )
   if (!isProfile(saved)) throw new Error('저장된 프로필 응답 형식이 올바르지 않습니다.')
-  window.dispatchEvent(new Event('netradar:profile-changed'))
+  if (account === getStorageScope())
+    window.dispatchEvent(new Event('netradar:profile-changed'))
   return saved
 }

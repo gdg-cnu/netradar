@@ -3,7 +3,7 @@ import * as L from 'leaflet'
 import { cellToBoundary } from 'h3-js'
 import 'leaflet/dist/leaflet.css'
 import { assetUrl } from '../../utils/assets'
-import { formatWon } from '../../services/forecast'
+import { forecastSourceLabel, formatWon } from '../../services/forecast'
 import type { ForecastMetric, RankedForecastZone } from '../../types/forecast'
 
 interface ForecastMapProps {
@@ -146,7 +146,9 @@ export default function ForecastMap({
           metric === 'hourly'
             ? `예상 순시급 ${formatWon(zone.current.netHourly)}`
             : `예상 승객 수 ${zone.current.passengers}명/시간`
-        popup.append(title, value)
+        const source = document.createElement('small')
+        source.textContent = forecastSourceLabel(zone.provenance)
+        popup.append(title, value, source)
         polygon
           .bindPopup(popup, { autoPan: false, className: 'forecast-popup' })
           .openPopup([zone.lat, zone.lng])

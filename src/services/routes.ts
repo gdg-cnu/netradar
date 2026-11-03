@@ -8,12 +8,43 @@ import type {
   RouteRequest,
 } from '../types/route'
 import {
+  getDetourOption,
   isPlace,
   isRoutePlan,
   isTripEventResponse,
   validCoordinates,
 } from '../types/route'
 export type { Place } from '../types/route'
+
+export type PlaceSearchSource = 'demo' | 'sample' | 'unknown'
+export function getPlaceSearchSource(): PlaceSearchSource {
+  if (isDemoMode()) return 'demo'
+  return import.meta.env?.VITE_PLACE_SEARCH_SOURCE === 'sample' ? 'sample' : 'unknown'
+}
+export function placeSearchNotice(source: PlaceSearchSource): string {
+  if (source === 'demo')
+    return '데모 장소 목록에서 검색해요. 강남역·교대역·신논현역·삼성역·잠실역·서울역과 예시 충전소를 선택할 수 있어요.'
+  if (source === 'sample')
+    return '현재 연결된 서버는 강남역·교대역·신논현역·잠실역 4곳의 샘플 장소를 검색합니다. 전체 주소·충전소 검색은 아직 지원하지 않아요.'
+  return '연결된 장소 API의 결과를 표시합니다. 검색 가능한 지역·장소는 서버가 제공하는 범위에 따라 달라요.'
+}
+export function placeSearchEmptyMessage(source: PlaceSearchSource): string {
+  if (source === 'sample')
+    return '샘플 장소 4곳 중 일치하는 결과가 없어요. 강남역·교대역·신논현역·잠실역을 검색하거나 저장된 즐겨찾기를 선택해 주세요.'
+  if (source === 'demo')
+    return '데모 목록에 일치하는 장소가 없어요. 강남역·삼성역·잠실역 등을 검색해 보세요.'
+  return '검색 결과가 없어요. 다른 장소 이름이나 주소를 입력해 주세요. 장소 검색 API의 지원 범위를 벗어났을 수도 있어요.'
+}
+export function routeEstimateNotice(
+  demo: boolean,
+  configuredSource: string | undefined = import.meta.env?.VITE_ROUTE_ESTIMATE_SOURCE,
+): string {
+  if (demo)
+    return '실제 교통·수요와 연결되지 않은 시뮬레이션입니다. 실제 길 안내로 사용하지 마세요.'
+  if (configuredSource === 'sample')
+    return '도로 경로는 서버 제공 정보이며, 예상 수익은 샘플 수요와 시연용 비용 모델로 계산한 예시 추정값입니다. 실제 수익을 보장하지 않아요.'
+  return '서버에서 제공한 경로와 예상 수익입니다. 수익 데이터의 출처와 예측 정확도는 확인되지 않았으며 실제 운행 결과와 다를 수 있어요.'
+}
 
 const samplePlaces: Place[] = [
   {
@@ -114,8 +145,9 @@ export async function recommendRoute(
         ),
       )
       const minutes = Math.max(8, Math.round(straightKm * 3))
-      const ratio = { little: 0.15, normal: 0.3, much: 0.45 }[request.detour]
-      const count = { little: 1, normal: 2, much: 3 }[request.detour]
+      const option = getDetourOption(request.detour)
+      const ratio = option.percent / 100
+      const count = option.demoStops
       const stops = samplePlaces
         .filter(
           (p) =>

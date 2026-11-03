@@ -4,10 +4,22 @@ import { useLocation } from '../hooks/useLocation'
 import { useDrive } from '../hooks/useDrive'
 import { getProfile } from '../services/profile'
 import { isDemoMode } from '../services/api'
-import { recommendRoute, searchPlaces } from '../services/routes'
+import {
+  recommendRoute,
+  searchPlaces,
+  getPlaceSearchSource,
+  placeSearchNotice,
+  placeSearchEmptyMessage,
+} from '../services/routes'
 import { navigateTo } from '../utils/navigation'
 import { readStored, writeStored } from '../utils/storage'
-import { isPlace, isRoutePlan, validCoordinates } from '../types/route'
+import {
+  DETOUR_OPTIONS,
+  getDetourOption,
+  isPlace,
+  isRoutePlan,
+  validCoordinates,
+} from '../types/route'
 import type { Detour, Place, RoutePlan } from '../types/route'
 import RouteResults from '../components/route/RouteResults'
 import PlaceSearch from '../components/route/PlaceSearch'
@@ -26,11 +38,6 @@ interface Favorite {
   lng: number
   kind: string
 }
-const detours: { value: Detour; label: string; percent: number }[] = [
-  { value: 'little', label: '조금', percent: 15 },
-  { value: 'normal', label: '보통', percent: 30 },
-  { value: 'much', label: '많이', percent: 45 },
-]
 function validDraft(value: unknown): value is RouteDraft {
   if (!value || typeof value !== 'object') return false
   const v = value as RouteDraft
@@ -66,9 +73,11 @@ export default function RoutePage() {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const requestRef = useRef<AbortController | null>(null)
+  const requestGeneration = useRef(0)
   const lock = useRef(false)
   const mounted = useRef(true)
   const demo = isDemoMode()
+  const searchSource = getPlaceSearchSource()
   const incomingName = params.destination || params.zone
   const incomingLat = params.lat
   const incomingLng = params.lng
@@ -86,6 +95,16 @@ export default function RoutePage() {
     setError('')
     updateDraft({ ...draft, destination: place, plan: null })
   }
+  useEffect(() => {
+    // Hash navigation can change the destination without unmounting this page.
+    // Invalidate the old request before applying the new URL selection.
+    requestGeneration.current += 1
+    requestRef.current?.abort()
+    requestRef.current = null
+    lock.current = false
+    setPending(false)
+    setError('')
+  }, [incomingName, incomingLat, incomingLng, params.view])
   useEffect(() => {
     if (!incomingName || incomingLat === undefined || incomingLng === undefined) return
     const point = { lat: Number(incomingLat), lng: Number(incomingLng) }
@@ -126,7 +145,10 @@ export default function RoutePage() {
     mounted.current = true
     return () => {
       mounted.current = false
+      requestGeneration.current += 1
       requestRef.current?.abort()
+      requestRef.current = null
+      lock.current = false
     }
   }, [])
   useEffect(() => {
@@ -178,25 +200,38 @@ export default function RoutePage() {
     setError('')
     requestRef.current?.abort()
     const controller = new AbortController()
+    const generation = ++requestGeneration.current
+    const requestHash = window.location.hash
     requestRef.current = controller
+    const ownsRequest = () =>
+      generation === requestGeneration.current && requestRef.current === controller
+    const canCommit = () =>
+      mounted.current &&
+      ownsRequest() &&
+      !controller.signal.aborted &&
+      window.location.hash === requestHash
     try {
       const plan = await recommendRoute(
         { origin, destination: draft.destination, detour: draft.detour },
         controller.signal,
       )
-      if (controller.signal.aborted) return
+      if (!canCommit()) return
       updateDraft({ ...draft, plan })
       navigateTo('route', { view: 'results' })
     } catch (caught) {
-      if (!controller.signal.aborted)
+      if (canCommit())
         setError(
           caught instanceof Error
             ? caught.message
             : '동선을 찾지 못했어요. 다시 시도해 주세요.',
         )
     } finally {
-      lock.current = false
-      if (!controller.signal.aborted) setPending(false)
+      // A cancelled request can finish after a newer request has already started.
+      if (ownsRequest()) {
+        requestRef.current = null
+        lock.current = false
+        if (mounted.current) setPending(false)
+      }
     }
   }
   async function startDrive() {
@@ -318,6 +353,7 @@ export default function RoutePage() {
               }}
             />
           </label>
+          <p className="route-search-source">{placeSearchNotice(searchSource)}</p>
           {draft.destination && (
             <p className="route-selected-place">✓ {draft.destination.address}</p>
           )}
@@ -338,14 +374,7 @@ export default function RoutePage() {
               !searchError &&
               query.trim().length >= 2 &&
               !draft.destination &&
-              matches.length === 0 && (
-                <p>
-                  검색 결과가 없어요.
-                  {demo
-                    ? ' 데모에서는 강남역, 삼성역, 잠실역 등을 검색해 보세요.'
-                    : ' 다른 장소나 주소를 입력해 주세요.'}
-                </p>
-              )}
+              matches.length === 0 && <p>{placeSearchEmptyMessage(searchSource)}</p>}
           </div>
           {matches.length > 0 && !draft.destination && (
             <ul className="route-search-results" aria-label="장소 검색 결과">
@@ -392,7 +421,7 @@ export default function RoutePage() {
           <fieldset className="route-detour">
             <legend>조금 돌아가도 괜찮으세요?</legend>
             <div className="segmented">
-              {detours.map((option) => (
+              {DETOUR_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -408,9 +437,8 @@ export default function RoutePage() {
               ))}
             </div>
             <p>
-              직행 시간보다 최대{' '}
-              {detours.find((option) => option.value === draft.detour)?.percent}% 더
-              걸리는 범위에서 찾아요.
+              직행 시간보다 최대 {getDetourOption(draft.detour).percent}% 더 걸리는
+              범위에서 찾아요.
             </p>
           </fieldset>
           {error && (

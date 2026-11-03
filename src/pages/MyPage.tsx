@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import FavoriteEditor from '../components/profile/FavoriteEditor'
 import TermsDialog from '../components/common/TermsDialog'
 import { useLocation } from '../hooks/useLocation'
-import { getProfile, saveProfile } from '../services/profile'
+import { getProfileForSettings, saveProfile } from '../services/profile'
 import { isDemoMode } from '../services/api'
 import type { FavoritePlace, UserProfile } from '../types/profile'
 import { navigateTo } from '../utils/navigation'
 import { assetUrl } from '../utils/assets'
+import { getStorageScope } from '../utils/storage'
 import '../styles/profile.css'
 
 const permissionLabels: Record<string, string> = {
@@ -25,6 +26,7 @@ export default function MyPage({
   userName?: string
 }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [registration, setRegistration] = useState<UserProfile | null>(null)
   const [name, setName] = useState('')
   const [vehicleType, setVehicleType] = useState('LPG')
   const [loading, setLoading] = useState(true)
@@ -35,61 +37,82 @@ export default function MyPage({
   const [showTerms, setShowTerms] = useState(false)
   const [reload, setReload] = useState(0)
   const mutation = useRef(false)
+  const mounted = useRef(true)
   const location = useLocation()
 
   useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  useEffect(() => {
     let active = true
+    const account = getStorageScope()
+    const current = () => active && account === getStorageScope()
     setLoading(true)
+    setProfile(null)
+    setRegistration(null)
+    setNotice('')
+    setEditing(null)
     setError('')
-    getProfile()
-      .then((value) => {
-        if (active) {
-          setProfile(value)
-          setName(value.name)
-          setVehicleType(value.vehicleType)
-        }
+    getProfileForSettings(userName)
+      .then((result) => {
+        if (!current()) return
+        const value = result.kind === 'registered' ? result.profile : result.draft
+        if (result.kind === 'registered') setProfile(result.profile)
+        else setRegistration(result.draft)
+        setName(value.name)
+        setVehicleType(value.vehicleType)
       })
       .catch((cause) => {
-        if (active)
+        if (current())
           setError(
             cause instanceof Error ? cause.message : '프로필을 불러오지 못했습니다.',
           )
       })
       .finally(() => {
-        if (active) setLoading(false)
+        if (current()) setLoading(false)
       })
     return () => {
       active = false
     }
-  }, [reload])
+  }, [reload, userName])
 
-  async function persist(next: UserProfile, message: string) {
-    if (mutation.current) return
+  async function persist(next: UserProfile, message: string): Promise<boolean> {
+    if (mutation.current) return false
+    const account = getStorageScope()
+    const current = () => mounted.current && account === getStorageScope()
     mutation.current = true
     setSaving(true)
     setError('')
     setNotice('')
     try {
       const saved = await saveProfile(next)
+      if (!current()) return false
       setProfile(saved)
+      setRegistration(null)
       setName(saved.name)
       setVehicleType(saved.vehicleType)
       setNotice(message)
+      return true
     } catch (cause) {
+      if (!current()) return false
       const message =
         cause instanceof Error ? cause.message : '저장하지 못했습니다. 다시 시도해주세요.'
       setError(message)
       throw new Error(message)
     } finally {
       mutation.current = false
-      setSaving(false)
+      if (current()) setSaving(false)
     }
   }
 
   async function saveFavorite(favorite: FavoritePlace) {
     if (!profile) return
     const found = profile.favorites.some((item) => item.id === favorite.id)
-    await persist(
+    const saved = await persist(
       {
         ...profile,
         favorites: found
@@ -98,8 +121,10 @@ export default function MyPage({
       },
       '즐겨찾기를 저장했어요.',
     )
-    setEditing(null)
+    if (saved) setEditing(null)
   }
+
+  const formProfile = profile ?? registration
 
   return (
     <main className="page-shell profile-page">
@@ -113,7 +138,7 @@ export default function MyPage({
       {error && (
         <div className="profile-error" role="alert">
           {error}
-          {!profile && (
+          {!profile && !registration && (
             <button type="button" onClick={() => setReload((value) => value + 1)}>
               다시 불러오기
             </button>
@@ -128,18 +153,28 @@ export default function MyPage({
       {loading ? (
         <p role="status">프로필을 불러오는 중…</p>
       ) : (
-        profile && (
-          <div className="profile-grid">
+        formProfile && (
+          <div className={profile ? 'profile-grid' : 'profile-registration'}>
             <section className="profile-panel panel">
-              <div className="profile-identity">
-                <div className="avatar">
-                  <img src={assetUrl('0d2ea.svg')} alt="" />
+              {registration ? (
+                <div className="profile-registration-heading">
+                  <h2>프로필을 처음 등록해 주세요</h2>
+                  <p>
+                    아직 저장된 프로필이 없습니다. 이름과 차종을 확인한 뒤 등록해 주세요.
+                    저장 후 즐겨찾기와 앱 설정을 사용할 수 있습니다.
+                  </p>
                 </div>
-                <div>
-                  <h2>{profile.name || userName} 기사님</h2>
-                  <p>오늘도 안전 운전하세요.</p>
+              ) : (
+                <div className="profile-identity">
+                  <div className="avatar">
+                    <img src={assetUrl('0d2ea.svg')} alt="" />
+                  </div>
+                  <div>
+                    <h2>{formProfile.name || userName} 기사님</h2>
+                    <p>오늘도 안전 운전하세요.</p>
+                  </div>
                 </div>
-              </div>
+              )}
               <form
                 className="profile-form"
                 onSubmit={(event) => {
@@ -149,8 +184,8 @@ export default function MyPage({
                     return
                   }
                   void persist(
-                    { ...profile, name: name.trim(), vehicleType },
-                    '프로필을 저장했어요.',
+                    { ...formProfile, name: name.trim(), vehicleType },
+                    registration ? '프로필을 등록했어요.' : '프로필을 저장했어요.',
                   ).catch(() => {})
                 }}
               >
@@ -158,6 +193,7 @@ export default function MyPage({
                   이름
                   <input
                     value={name}
+                    disabled={saving}
                     maxLength={30}
                     required
                     onChange={(event) => setName(event.target.value)}
@@ -167,6 +203,7 @@ export default function MyPage({
                   차종
                   <select
                     value={vehicleType}
+                    disabled={saving}
                     onChange={(event) => setVehicleType(event.target.value)}
                   >
                     <option>LPG</option>
@@ -177,126 +214,146 @@ export default function MyPage({
                   </select>
                 </label>
                 <button className="primary-button" disabled={saving}>
-                  {saving ? '저장 중…' : '프로필 저장'}
+                  {saving ? '저장 중…' : registration ? '프로필 등록' : '프로필 저장'}
                 </button>
               </form>
-              <button
-                className="profile-history-link"
-                onClick={() => navigateTo('replay')}
-              >
-                운행 기록 확인 <span aria-hidden="true">→</span>
-              </button>
-            </section>
-            <section className="profile-panel panel">
-              <div className="profile-section-heading">
-                <h2>즐겨찾기</h2>
+              {profile && (
                 <button
-                  className="profile-text-button"
-                  onClick={() => setEditing('new')}
-                  disabled={saving}
+                  className="profile-history-link"
+                  onClick={() => navigateTo('replay')}
                 >
-                  + 장소 추가
+                  운행 기록 확인 <span aria-hidden="true">→</span>
                 </button>
-              </div>
-              {profile.favorites.length === 0 ? (
-                <p className="profile-empty">
-                  저장한 장소가 없습니다. 자주 가는 목적지를 추가해보세요.
-                </p>
-              ) : (
-                <ul className="favorite-list">
-                  {profile.favorites.map((favorite) => (
-                    <li key={favorite.id}>
-                      <button
-                        className="favorite-destination"
-                        onClick={() =>
-                          navigateTo('route', {
-                            destination: favorite.label,
-                            lat: String(favorite.lat),
-                            lng: String(favorite.lng),
-                          })
-                        }
-                      >
-                        <strong>{favorite.label}</strong>
-                        <span>{favorite.address}</span>
-                      </button>
-                      <div className="favorite-actions">
-                        <button
-                          onClick={() => setEditing(favorite)}
-                          disabled={saving}
-                          aria-label={`${favorite.label} 수정`}
-                        >
-                          수정
-                        </button>
-                        <button
-                          onClick={() =>
-                            void persist(
-                              {
-                                ...profile,
-                                favorites: profile.favorites.filter(
-                                  (item) => item.id !== favorite.id,
-                                ),
-                              },
-                              '즐겨찾기를 삭제했어요.',
-                            ).catch(() => {})
-                          }
-                          disabled={saving}
-                          aria-label={`${favorite.label} 삭제`}
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
               )}
             </section>
-            <section className="profile-panel panel profile-settings">
-              <h2>앱 설정</h2>
-              <div className="profile-setting-row">
-                <div>
-                  <strong>위치 권한</strong>
-                  <p>{permissionLabels[location.status] ?? location.status}</p>
-                  {location.error && <p className="profile-error">{location.error}</p>}
-                </div>
-                <button
-                  className="profile-secondary"
-                  onClick={location.requestLocation}
-                  disabled={location.status === 'loading'}
-                >
-                  위치 확인
-                </button>
-              </div>
-              <label className="profile-setting-row">
-                <div>
-                  <strong>앱 내 알림</strong>
-                  <p>경유지와 추천 안내 표시 설정</p>
-                </div>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={profile.notifications}
-                  disabled={saving}
-                  onChange={(event) =>
-                    void persist(
-                      { ...profile, notifications: event.target.checked },
-                      '알림 설정을 저장했어요.',
-                    ).catch(() => {})
-                  }
-                />
-              </label>
-              <button className="profile-setting-link" onClick={() => setShowTerms(true)}>
-                서비스 이용·개인정보 안내 <span aria-hidden="true">›</span>
-              </button>
-              <button
-                className="profile-setting-link profile-logout"
-                onClick={onLogout}
-                disabled={saving}
-              >
-                로그아웃 <span aria-hidden="true">›</span>
-              </button>
-            </section>
+            {profile && (
+              <>
+                <section className="profile-panel panel">
+                  <div className="profile-section-heading">
+                    <h2>즐겨찾기</h2>
+                    <button
+                      className="profile-text-button"
+                      onClick={() => setEditing('new')}
+                      disabled={saving}
+                    >
+                      + 장소 추가
+                    </button>
+                  </div>
+                  {profile.favorites.length === 0 ? (
+                    <p className="profile-empty">
+                      저장한 장소가 없습니다. 자주 가는 목적지를 추가해보세요.
+                    </p>
+                  ) : (
+                    <ul className="favorite-list">
+                      {profile.favorites.map((favorite) => (
+                        <li key={favorite.id}>
+                          <button
+                            className="favorite-destination"
+                            onClick={() =>
+                              navigateTo('route', {
+                                destination: favorite.label,
+                                lat: String(favorite.lat),
+                                lng: String(favorite.lng),
+                              })
+                            }
+                          >
+                            <strong>{favorite.label}</strong>
+                            <span>{favorite.address}</span>
+                          </button>
+                          <div className="favorite-actions">
+                            <button
+                              onClick={() => setEditing(favorite)}
+                              disabled={saving}
+                              aria-label={`${favorite.label} 수정`}
+                            >
+                              수정
+                            </button>
+                            <button
+                              onClick={() =>
+                                void persist(
+                                  {
+                                    ...profile,
+                                    favorites: profile.favorites.filter(
+                                      (item) => item.id !== favorite.id,
+                                    ),
+                                  },
+                                  '즐겨찾기를 삭제했어요.',
+                                ).catch(() => {})
+                              }
+                              disabled={saving}
+                              aria-label={`${favorite.label} 삭제`}
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+                <section className="profile-panel panel profile-settings">
+                  <h2>앱 설정</h2>
+                  <div className="profile-setting-row">
+                    <div>
+                      <strong>위치 권한</strong>
+                      <p>{permissionLabels[location.status] ?? location.status}</p>
+                      {location.error && (
+                        <p className="profile-error">{location.error}</p>
+                      )}
+                    </div>
+                    <button
+                      className="profile-secondary"
+                      onClick={location.requestLocation}
+                      disabled={location.status === 'loading'}
+                    >
+                      위치 확인
+                    </button>
+                  </div>
+                  <label className="profile-setting-row">
+                    <div>
+                      <strong>앱 내 알림</strong>
+                      <p>경유지와 추천 안내 표시 설정</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={profile.notifications}
+                      disabled={saving}
+                      onChange={(event) =>
+                        void persist(
+                          { ...profile, notifications: event.target.checked },
+                          '알림 설정을 저장했어요.',
+                        ).catch(() => {})
+                      }
+                    />
+                  </label>
+                  <button
+                    className="profile-setting-link"
+                    onClick={() => setShowTerms(true)}
+                  >
+                    서비스 이용·개인정보 안내 <span aria-hidden="true">›</span>
+                  </button>
+                  <button
+                    className="profile-setting-link profile-logout"
+                    onClick={onLogout}
+                    disabled={saving}
+                  >
+                    로그아웃 <span aria-hidden="true">›</span>
+                  </button>
+                </section>
+              </>
+            )}
           </div>
         )
+      )}
+      {!profile && !loading && (
+        <button
+          className="profile-initial-logout profile-secondary"
+          onClick={onLogout}
+          disabled={saving}
+        >
+          로그아웃
+        </button>
       )}
       {editing && (
         <FavoriteEditor

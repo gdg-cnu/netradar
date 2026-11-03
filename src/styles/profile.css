@@ -20,6 +20,18 @@
   gap: 24px;
   align-items: start;
 }
+.profile-registration {
+  max-width: 520px;
+}
+.profile-registration-heading {
+  margin-bottom: 24px;
+}
+.profile-registration-heading p {
+  margin-top: 10px;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.7;
+}
 .profile-panel {
   min-width: 0;
   padding: 24px;
