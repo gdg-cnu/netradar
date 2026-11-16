@@ -9,8 +9,11 @@ WBS 4.1~4.5의 화면과 상태 흐름을 구현했습니다. 기본 실행은 �
 
 Node.js 24 LTS와 pnpm 11.25.0을 권장합니다. 최소 Node.js 버전은 22.12.0입니다.
 
+프런트엔드 관련 파일은 모두 `front/` 폴더에 있으며, 아래 명령은 `front/`에서 실행합니다.
+
 ```sh
 npm install -g pnpm@11.25.0
+cd front
 pnpm install --frozen-lockfile
 cp .env.example .env.local
 pnpm dev
@@ -57,7 +60,7 @@ pnpm test:e2e:live
 
 ### 데모와 실제 API 모드
 
-`.env.local`에서 설정합니다. `.env.local`은 Git에 올라가지 않습니다.
+`front/.env.local`에서 설정합니다. `.env.local`은 Git에 올라가지 않습니다.
 
 | 변수                                 | 용도                                                                            |
 | ------------------------------------ | ------------------------------------------------------------------------------- |
@@ -91,14 +94,14 @@ Supabase의 Site URL/Redirect URLs에 실제 앱 주소를 등록하고 메일 �
 
 | 요청                                                       | 구조·용도                                                                                                               |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `GET /forecast/zones?metric=hourly&horizon=0&resolution=8` | `src/types/forecast.ts`의 `ForecastApiResponse`; 어댑터가 출처·표시 정보를 더해 `ForecastResponse`로 정규화             |
-| `GET /places/search?q=...`                                 | `src/types/route.ts`의 `Place[]`                                                                                        |
+| `GET /forecast/zones?metric=hourly&horizon=0&resolution=8` | `front/src/types/forecast.ts`의 `ForecastApiResponse`; 어댑터가 출처·표시 정보를 더해 `ForecastResponse`로 정규화             |
+| `GET /places/search?q=...`                                 | `front/src/types/route.ts`의 `Place[]`                                                                                        |
 | `POST /routes/recommendations`                             | `RouteRequest` → `RoutePlan`; `directPath/recommendedPath`는 선택적인 `[위도, 경도][]`, 재추천 시 `excludeStopIds` 전달 |
 | `POST /trips`                                              | `{routeId,destination,detour}` → `{id}`; `Idempotency-Key` 헤더                                                         |
 | `POST /trips/{id}/events`                                  | `{eventId,type,occurredAt,payload}` → `{accepted,totals?}`; 같은 키의 요청은 동일한 결과 반환 필요                      |
 | `GET /me/profile`                                          | `UserProfile`; 404일 때만 마이페이지 최초 등록 폼을 표시하며 401/서버 오류는 구분                                       |
 | `PATCH /me/profile`                                        | 전체 `UserProfile` 생성 또는 수정 후 확정값 반환. 성공 전 미등록 프로필·즐겨찾기를 저장된 것으로 취급하지 않음          |
-| `GET /me/trips?month=YYYY-MM`                              | `src/types/history.ts`의 `TripRecord[]`                                                                                 |
+| `GET /me/trips?month=YYYY-MM`                              | `front/src/types/history.ts`의 `TripRecord[]`                                                                                 |
 
 운행 이벤트는 `ARRIVE`, `PICK_UP`, `DROP_OFF`, `SKIP`, `EXTEND_WAIT`, `RECOMMEND`, `FINISH`를 사용합니다.
 실제 모드의 `DROP_OFF`·`FINISH` 응답에는 `{revenue,cost,extraProfit}` 정산값이 반드시 있어야 합니다.
@@ -132,19 +135,22 @@ API 서버는 프런트 출처의 CORS와 `Authorization`, `Idempotency-Key` 헤
 ### 폴더 구조
 
 ```text
-public/assets/     원본 화면의 이미지·아이콘
-src/
-  components/     공통·지도·동선·운행·프로필·기록 UI
-  hooks/          인증·라우트·위치·예측·운행 상태
-  pages/          로그인·지도·동선·운행·기록·마이페이지
-  services/       API 전송, 인증, 기능별 요청과 명시적 데모 데이터
-  styles/         기능별 반응형 스타일
-  types/          API 모델과 운행 상태 전이
-  utils/          URL 전환·자산·사용자별 저장
-  App.tsx         인증 상태별 화면 구성 및 화면 단위 지연 로딩
-  main.tsx        React 진입점과 오류 경계
-  index.css       원본 공통 스타일
- tests/            상태·계산 단위 테스트 및 e2e 브라우저 테스트
+backend/            FastAPI 백엔드
+docs/               문서
+front/              프런트엔드 (Vite · React)
+  public/assets/    원본 화면의 이미지·아이콘
+  src/
+    components/     공통·지도·동선·운행·프로필·기록 UI
+    hooks/          인증·라우트·위치·예측·운행 상태
+    pages/          로그인·지도·동선·운행·기록·마이페이지
+    services/       API 전송, 인증, 기능별 요청과 명시적 데모 데이터
+    styles/         기능별 반응형 스타일
+    types/          API 모델과 운행 상태 전이
+    utils/          URL 전환·자산·사용자별 저장
+    App.tsx         인증 상태별 화면 구성 및 화면 단위 지연 로딩
+    main.tsx        React 진입점과 오류 경계
+    index.css       원본 공통 스타일
+  tests/            상태·계산 단위 테스트 및 e2e 브라우저 테스트
 ```
 
 React 19 · TypeScript · Vite 8 · Tailwind CSS 4 · Leaflet · H3 · Supabase Auth
