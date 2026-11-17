@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import ForecastMap from '../components/map/ForecastMap'
 import ZoneDetails from '../components/map/ZoneDetails'
+import FreshnessBadge from '../components/common/FreshnessBadge'
 import { useForecast } from '../hooks/useForecast'
+import { useFreshness } from '../hooks/useFreshness'
 import { useLocation } from '../hooks/useLocation'
 import { isDemoMode } from '../services/api'
 import {
@@ -36,6 +38,7 @@ export default function MapPage() {
   const [query, setQuery] = useState('')
   const [searchNotice, setSearchNotice] = useState('')
   const { data, loading, error, retry } = useForecast(metric, horizon)
+  const freshness = useFreshness(data?.generatedAt)
   const { position, status, error: locationError, requestLocation } = useLocation()
   const localDemo = isDemoMode()
   const provenance = data?.provenance ?? (localDemo ? 'local-demo' : 'server-unspecified')
@@ -51,7 +54,7 @@ export default function MapPage() {
   const top = zones[0]
 
   return (
-    <main className="forecast-page">
+    <main className="forecast-page" data-freshness={freshness}>
       <header className="forecast-page-heading">
         <div>
           <span className="eyebrow">시급 지도</span>
@@ -70,6 +73,20 @@ export default function MapPage() {
           {forecastSourceNotice(provenance)}
         </p>
       )}
+      <div className="forecast-freshness-row">
+        <div id="forecast-freshness">
+          {data && <FreshnessBadge status={freshness} generatedAt={data.generatedAt} />}
+        </div>
+        <button
+          type="button"
+          className="forecast-refresh-button"
+          onClick={retry}
+          disabled={loading}
+          aria-label="예측 새로고침"
+        >
+          {loading ? '불러오는 중…' : '예측 새로고침'}
+        </button>
+      </div>
       <div className="forecast-layout">
         <section className="forecast-explorer" aria-label="지역별 예측 탐색">
           <div className="forecast-toolbar">
@@ -164,6 +181,7 @@ export default function MapPage() {
             selectedId={selected?.id}
             onSelect={setSelectedId}
             position={position}
+            freshness={freshness}
           />
           {top && (
             <button className="forecast-top-pick" onClick={() => setSelectedId(top.id)}>
@@ -187,6 +205,7 @@ export default function MapPage() {
             className="forecast-zone-list"
             aria-labelledby="forecast-zone-list-title"
             aria-busy={loading}
+            aria-describedby="forecast-freshness"
           >
             <div className="forecast-list-heading">
               <h2 id="forecast-zone-list-title">
@@ -252,7 +271,7 @@ export default function MapPage() {
               <p className="forecast-data-note">
                 {localDemo
                   ? `${zones.length}개 구역 · 로컬 시연용 예측`
-                  : `${zones.length}개 구역 · 서버 응답 시각 ${new Date(data.generatedAt).toLocaleString('ko-KR')}`}
+                  : `${zones.length}개 구역 · 서버에서 받은 예측`}
                 {provenance === 'mixed' && (
                   <span className="forecast-source-counts">
                     {Array.from(new Set(zones.map((zone) => zone.provenance)))

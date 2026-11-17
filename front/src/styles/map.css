@@ -754,3 +754,78 @@
   color: #8b6a4f;
   font-size: 10px;
 }
+.forecast-popup .leaflet-popup-content small[hidden] {
+  display: none;
+}
+
+.forecast-freshness-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.forecast-freshness-row > div {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.forecast-refresh-button {
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 9px;
+  color: #374151;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.forecast-refresh-button:disabled {
+  color: #6b7280;
+  cursor: wait;
+}
+.forecast-legend-unavailable {
+  margin-top: 5px;
+  color: #4b5563;
+  font-size: 10px;
+}
+.forecast-page:not([data-freshness='fresh']) .forecast-top-pick,
+.forecast-page:not([data-freshness='fresh'])
+  .forecast-zone-list
+  li
+  button[aria-pressed='true'],
+.forecast-page:not([data-freshness='fresh']) .forecast-main-value,
+.forecast-page:not([data-freshness='fresh']) .forecast-rank {
+  color: #374151;
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+.forecast-page:not([data-freshness='fresh']) .forecast-top-marker,
+.forecast-page:not([data-freshness='fresh']) .forecast-top-medal {
+  background: #6b7280;
+}
+.forecast-page:not([data-freshness='fresh']) .forecast-top-pick strong,
+.forecast-page:not([data-freshness='fresh']) .forecast-top-pick small,
+.forecast-page:not([data-freshness='fresh']) .forecast-top-pick > b,
+.forecast-page:not([data-freshness='fresh']) .forecast-main-value strong,
+.forecast-page:not([data-freshness='fresh']) .forecast-zone-list li b,
+.forecast-page:not([data-freshness='fresh']) .forecast-trend-values,
+.forecast-page:not([data-freshness='fresh']) .forecast-trend-values .current,
+.forecast-page:not([data-freshness='fresh']) .forecast-breakdown .net-total dd,
+.forecast-page:not([data-freshness='fresh']) .forecast-popup .leaflet-popup-content p {
+  color: #4b5563;
+}
+.forecast-page:not([data-freshness='fresh']) .forecast-trend polyline {
+  stroke: #6b7280;
+}
+.forecast-page:not([data-freshness='fresh']) .forecast-trend circle {
+  fill: #6b7280;
+}
+.forecast-page:not([data-freshness='fresh']) .cost-net {
+  background: #6b7280;
+}
+.forecast-page:not([data-freshness='fresh']) .cost-fuel {
+  background: #9ca3af;
+}
+.forecast-page:not([data-freshness='fresh']) .cost-idle {
+  background: #d1d5db;
+}

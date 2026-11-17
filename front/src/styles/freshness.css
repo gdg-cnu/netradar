@@ -1,0 +1,23 @@
+.freshness-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border: 1px solid #d5e4d9;
+  border-radius: 9px;
+  color: #34573f;
+  background: #f1f7f2;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.freshness-badge time {
+  font-size: 11px;
+}
+.freshness-badge[data-freshness='stale'],
+.freshness-badge[data-freshness='unknown'] {
+  color: #374151;
+  border-color: #9ca3af;
+  background: #f3f4f6;
+}

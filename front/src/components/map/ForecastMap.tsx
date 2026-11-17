@@ -5,16 +5,27 @@ import 'leaflet/dist/leaflet.css'
 import { assetUrl } from '../../utils/assets'
 import { forecastSourceLabel, formatWon } from '../../services/forecast'
 import type { ForecastMetric, RankedForecastZone } from '../../types/forecast'
+import type { FreshnessStatus } from '../../utils/freshness'
 
 interface ForecastMapProps {
   zones: RankedForecastZone[]
   metric: ForecastMetric
+  freshness: FreshnessStatus
   selectedId?: string
   onSelect: (id: string) => void
   position: {
     lat: number
     lng: number
   } | null
+}
+
+interface ForecastLayer {
+  polygon: L.Polygon
+  rank: number
+  selected: boolean
+  tooltip: HTMLSpanElement
+  tooltipText: string
+  popupWarning?: HTMLElement
 }
 
 export function forecastColor(rank: number, count: number): string {
@@ -27,16 +38,50 @@ export function forecastColor(rank: number, count: number): string {
   ]
 }
 
+function updateLayerFreshness(layers: ForecastLayer[], freshness: FreshnessStatus) {
+  for (const layer of layers) {
+    layer.polygon.setStyle({
+      color: layer.selected ? (freshness === 'fresh' ? '#6b250c' : '#374151') : '#ffffff',
+      weight: layer.selected ? 4 : 2,
+      fillColor:
+        freshness === 'fresh' ? forecastColor(layer.rank, layers.length) : '#6b7280',
+      fillOpacity: layer.selected ? 0.78 : 0.62,
+    })
+    layer.tooltip.textContent = `${layer.tooltipText}${
+      freshness === 'stale'
+        ? ' · 오래된 예측'
+        : freshness === 'unknown'
+          ? ' · 생성 시각 확인 불가'
+          : ''
+    }`
+    layer.polygon.getTooltip()?.update()
+    if (layer.popupWarning) {
+      layer.popupWarning.hidden = freshness === 'fresh'
+      layer.popupWarning.textContent =
+        freshness === 'stale'
+          ? '생성 후 20분 이상 지난 예측입니다.'
+          : freshness === 'unknown'
+            ? '예측 생성 시각을 확인할 수 없습니다.'
+            : ''
+      // Recalculate an open popup's size without reopening a dismissed popup.
+      layer.polygon.getPopup()?.update()
+    }
+  }
+}
+
 export default function ForecastMap({
   zones,
   metric,
   selectedId,
   onSelect,
   position,
+  freshness,
 }: ForecastMapProps) {
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layersRef = useRef<L.LayerGroup | null>(null)
+  const forecastLayersRef = useRef<ForecastLayer[]>([])
+  const freshnessRef = useRef(freshness)
   const locationLayer = useRef<L.CircleMarker | null>(null)
   const hasFit = useRef(false)
   const onSelectRef = useRef(onSelect)
@@ -87,16 +132,24 @@ export default function ForecastMap({
       map.remove()
       mapRef.current = null
       layersRef.current = null
+      forecastLayersRef.current = []
       locationLayer.current = null
       hasFit.current = false
     }
   }, [])
 
   useEffect(() => {
+    freshnessRef.current = freshness
+    // Preserve focused marker DOM and the user's popup state as the data ages.
+    updateLayerFreshness(forecastLayersRef.current, freshness)
+  }, [freshness])
+
+  useEffect(() => {
     const map = mapRef.current
     const layers = layersRef.current
     if (!map || !layers) return
     layers.clearLayers()
+    forecastLayersRef.current = []
     if (!zones.length) return
     if (!hasFit.current) {
       map.fitBounds(
@@ -107,18 +160,21 @@ export default function ForecastMap({
     }
     for (const zone of zones) {
       const selected = zone.id === selectedId
-      const polygon = L.polygon(cellToBoundary(zone.h3Index), {
-        color: selected ? '#6b250c' : '#ffffff',
-        weight: selected ? 4 : 2,
-        fillColor: forecastColor(zone.rank, zones.length),
-        fillOpacity: selected ? 0.78 : 0.62,
-      }).addTo(layers)
+      const polygon = L.polygon(cellToBoundary(zone.h3Index)).addTo(layers)
       const tooltip = document.createElement('span')
-      tooltip.textContent = `${zone.name} · ${
+      const tooltipText = `${zone.name} · ${
         metric === 'hourly'
           ? formatWon(zone.current.netHourly)
           : `${zone.current.passengers}명`
       }`
+      const forecastLayer: ForecastLayer = {
+        polygon,
+        rank: zone.rank,
+        selected,
+        tooltip,
+        tooltipText,
+      }
+      forecastLayersRef.current.push(forecastLayer)
       polygon.bindTooltip(tooltip, { direction: 'top' })
       polygon.on('click', () => onSelectRef.current(zone.id))
       if (zone.rank === 1) {
@@ -148,12 +204,16 @@ export default function ForecastMap({
             : `예상 승객 수 ${zone.current.passengers}명/시간`
         const source = document.createElement('small')
         source.textContent = forecastSourceLabel(zone.provenance)
-        popup.append(title, value, source)
+        const warning = document.createElement('small')
+        warning.hidden = true
+        forecastLayer.popupWarning = warning
+        popup.append(title, value, source, warning)
         polygon
           .bindPopup(popup, { autoPan: false, className: 'forecast-popup' })
           .openPopup([zone.lat, zone.lng])
       }
     }
+    updateLayerFreshness(forecastLayersRef.current, freshnessRef.current)
   }, [zones, selectedId, metric])
 
   useEffect(() => {
@@ -183,6 +243,7 @@ export default function ForecastMap({
           tileStatus === 'unavailable' ? 'is-unavailable' : ''
         }`}
         aria-label="서울 지역별 예상 수입 지도. 방향키로 이동하고 아래 지역 목록에서 선택할 수 있습니다."
+        aria-describedby="forecast-freshness"
       />
       {tileStatus === 'unavailable' && (
         <div className="forecast-map-fallback" role="status">
@@ -201,14 +262,26 @@ export default function ForecastMap({
       )}
       <div
         className="forecast-legend"
-        aria-label="색이 진할수록 선택한 지표의 예상 값이 높습니다"
+        aria-label={
+          freshness === 'fresh'
+            ? '색이 진할수록 선택한 지표의 예상 값이 높습니다'
+            : '회색은 오래되었거나 생성 시각을 확인할 수 없는 예측입니다'
+        }
       >
         <span>{metric === 'hourly' ? '예상 순시급' : '예상 승객 수'}</span>
-        <div>
-          <small>낮음</small>
-          <i />
-          <small>높음</small>
-        </div>
+        {freshness === 'fresh' ? (
+          <div>
+            <small>낮음</small>
+            <i />
+            <small>높음</small>
+          </div>
+        ) : (
+          <p className="forecast-legend-unavailable">
+            {freshness === 'stale'
+              ? '오래된 예측 · 회색 표시'
+              : '생성 시각 확인 불가 · 회색 표시'}
+          </p>
+        )}
       </div>
       {tileStatus === 'unavailable' && (
         <a
