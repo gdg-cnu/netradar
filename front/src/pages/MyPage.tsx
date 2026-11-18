@@ -8,6 +8,8 @@ import type { FavoritePlace, UserProfile } from '../types/profile'
 import { navigateTo } from '../utils/navigation'
 import { assetUrl } from '../utils/assets'
 import { getStorageScope } from '../utils/storage'
+import { isV2Preview } from '../v2/mode'
+import SurgeAlertPreference from '../v2/components/SurgeAlertPreference'
 import '../styles/profile.css'
 
 const permissionLabels: Record<string, string> = {
@@ -309,24 +311,28 @@ export default function MyPage({
                       위치 확인
                     </button>
                   </div>
-                  <label className="profile-setting-row">
-                    <div>
-                      <strong>앱 내 알림</strong>
-                      <p>경유지와 추천 안내 표시 설정</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      checked={profile.notifications}
-                      disabled={saving}
-                      onChange={(event) =>
-                        void persist(
-                          { ...profile, notifications: event.target.checked },
-                          '알림 설정을 저장했어요.',
-                        ).catch(() => {})
-                      }
-                    />
-                  </label>
+                  {isV2Preview() ? (
+                    <SurgeAlertPreference />
+                  ) : (
+                    <label className="profile-setting-row">
+                      <div>
+                        <strong>앱 내 알림</strong>
+                        <p>경유지와 추천 안내 표시 설정</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={profile.notifications}
+                        disabled={saving}
+                        onChange={(event) =>
+                          void persist(
+                            { ...profile, notifications: event.target.checked },
+                            '알림 설정을 저장했어요.',
+                          ).catch(() => {})
+                        }
+                      />
+                    </label>
+                  )}
                   <button
                     className="profile-setting-link"
                     onClick={() => setShowTerms(true)}

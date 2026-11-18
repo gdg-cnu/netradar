@@ -11,6 +11,7 @@ import {
 import { emailAuthErrorMessage, validateEmailAuth } from '../utils/authForm'
 import type { AuthFieldErrors, EmailAuthFields, EmailAuthMode } from '../utils/authForm'
 import { assetUrl } from '../utils/assets'
+import { isV2Preview } from '../v2/mode'
 
 export default function LoginPage({
   onDemoLogin,
@@ -131,9 +132,13 @@ export default function LoginPage({
         <div className="login-brand">
           <Brand />
           <p>
-            동선은 줄이고, 시급은 높이고
+            {isV2Preview()
+              ? '이동이 몰리는 순간을 미리 확인하세요'
+              : '동선은 줄이고, 시급은 높이고'}
             <br />
-            택시 기사님을 위한 시급 동선 추천 서비스
+            {isV2Preview()
+              ? '택시 기사님을 위한 수요 급증 예보'
+              : '택시 기사님을 위한 시급 동선 추천 서비스'}
           </p>
         </div>
       </div>
@@ -143,7 +148,11 @@ export default function LoginPage({
           기사님의 오늘 운행을
           <br />더 똑똑하게 시작하세요
         </h1>
-        <p>예상 시급 지도와 맞춤 동선을 한곳에서 확인하세요.</p>
+        <p>
+          {isV2Preview()
+            ? '지금부터 60분 뒤까지, 수요 지도와 이동 이벤트를 한곳에서 확인하세요.'
+            : '예상 시급 지도와 맞춤 동선을 한곳에서 확인하세요.'}
+        </p>
         <label className="consent-field">
           <input
             type="checkbox"

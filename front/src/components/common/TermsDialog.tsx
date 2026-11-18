@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { isV2Preview } from '../../v2/mode'
 
 export default function TermsDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -25,8 +26,9 @@ export default function TermsDialog({ onClose }: { onClose: () => void }) {
       </p>
       <h3>데모 데이터</h3>
       <p>
-        데모의 시급·승객 수·경로·수익은 예시 값입니다. 실제 수익이나 실시간 교통 정보를
-        보장하지 않습니다.
+        {isV2Preview()
+          ? '수요 지수·인구·이벤트·장소 범위·이동 시간·리플레이 관측값은 화면 테스트용 예시입니다. 실제 예보, 택시 승차 건수나 기사 수입을 나타내지 않습니다. 서울 도시데이터·공항·공연·열차 데이터 연계는 준비 중이며 현재 해당 자료를 실시간으로 수집해 표시하는 것은 아닙니다.'
+          : '데모의 시급·승객 수·경로·수익은 예시 값입니다. 실제 수익이나 실시간 교통 정보를 보장하지 않습니다.'}
       </p>
       <h3>이 기기에 저장되는 정보</h3>
       <p>
