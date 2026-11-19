@@ -37,6 +37,7 @@ export default function ZoneDetails({ zone, metric, horizon }: ZoneDetailsProps)
       id="forecast-zone-detail"
       className="forecast-details"
       aria-labelledby="zone-detail-title"
+      aria-describedby="forecast-freshness"
     >
       <div className="forecast-detail-heading">
         <span className="forecast-rank">{zone.rank}위</span>

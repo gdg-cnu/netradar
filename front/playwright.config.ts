@@ -30,6 +30,11 @@ export default defineConfig({
       'node node_modules/vite/bin/vite.js build --mode test && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5174 --strictPort',
     url: 'http://127.0.0.1:5174',
     reuseExistingServer: false,
-    env: { VITE_API_MODE: 'demo', VITE_SUPABASE_URL: '', VITE_SUPABASE_ANON_KEY: '' },
+    env: {
+      VITE_API_MODE: 'demo',
+      VITE_DEMO_VERSION: 'v1',
+      VITE_SUPABASE_URL: '',
+      VITE_SUPABASE_ANON_KEY: '',
+    },
   },
 })

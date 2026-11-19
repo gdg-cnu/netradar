@@ -4,6 +4,7 @@ import { useAppSession } from './hooks/useAppSession'
 import { useRoute } from './hooks/useRoute'
 import LoginPage from './pages/LoginPage'
 import { isDemoMode } from './services/api'
+import { isV2Preview } from './v2/mode'
 import './styles/app.css'
 
 const MapPage = lazy(() => import('./pages/MapPage'))
@@ -11,11 +12,16 @@ const RoutePage = lazy(() => import('./pages/RoutePage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
 const ReplayPage = lazy(() => import('./pages/ReplayPage'))
 const MyPage = lazy(() => import('./pages/MyPage'))
+const DemandMapPage = lazy(() => import('./v2/pages/DemandMapPage'))
+const DemandRoutePage = lazy(() => import('./v2/pages/DemandRoutePage'))
+const DemandDrivePage = lazy(() => import('./v2/pages/DemandDrivePage'))
+const DemandReplayPage = lazy(() => import('./v2/pages/DemandReplayPage'))
 
 export default function App() {
   const { user, ready, error, loginDemo, logout } = useAppSession()
   const { page, navigateTo } = useRoute()
   const [storageError, setStorageError] = useState(false)
+  const v2 = isV2Preview()
   useEffect(() => {
     const warn = () => setStorageError(true)
     window.addEventListener('netradar:storage-error', warn)
@@ -42,7 +48,11 @@ export default function App() {
       </a>
       <Navigation page={page} onChange={navigateTo} userName={user.name} />
       {isDemoMode() && (
-        <div className="demo-banner">데모 모드 · 예시 예측과 운행 데이터입니다.</div>
+        <div className="demo-banner">
+          {v2
+            ? '수요 급증 예보 · 목업 화면 테스트 · 실제 예보·관측 데이터가 아닙니다.'
+            : '데모 모드 · 예시 예측과 운행 데이터입니다.'}
+        </div>
       )}
       {storageError && (
         <div className="app-alert" role="alert">
@@ -63,10 +73,10 @@ export default function App() {
             </div>
           }
         >
-          {page === 'map' && <MapPage />}
-          {page === 'route' && <RoutePage />}
-          {page === 'drive' && <DrivePage />}
-          {page === 'replay' && <ReplayPage />}
+          {page === 'map' && (v2 ? <DemandMapPage /> : <MapPage />)}
+          {page === 'route' && (v2 ? <DemandRoutePage /> : <RoutePage />)}
+          {page === 'drive' && (v2 ? <DemandDrivePage /> : <DrivePage />)}
+          {page === 'replay' && (v2 ? <DemandReplayPage /> : <ReplayPage />)}
           {page === 'mypage' && (
             <MyPage
               onLogout={() => {
