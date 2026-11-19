@@ -6,6 +6,7 @@
 - 이전 초안 대비 변경: 수집기·실데이터 테이블·예보 예약 작업·AI 모듈 연결 추가, 수집하지 않는 데이터(김포공항, 열차, 기상) 제거, 테이블 이름을 계획 문서와 통일, `supabase/schema.sql` 기준 DB 수정 항목 구체화, 프론트 목업과 달라지는 점 정리(11장)
 - 응답 필드는 프론트 v2 목업과 함께 확정할 **제안안**이다
 - 경로는 모두 `/api/v1` 접두사 기준
+- 진행 상황 (2026-11-19): 14장 순서 3·4의 목업 기반 API(`/heatmap`, `/places/{id}`, `/events`, `/alerts/top`, `/config`) 구현 완료. v1 API는 그대로 둠. `/places/search`는 v1 동선 추천이 쓰는 `MOCK_PLACES`를 계속 검색함 (8.4 작업 때 교체)
 
 ---
 
@@ -199,7 +200,7 @@ API별 인증 필요 여부:
 ### 7.2 `GET /places/{id}`
 
 - `places.py`에서 `/search`를 먼저 등록 (FastAPI는 등록 순서대로 매칭하므로 늦게 두면 `search`가 id로 잡힘)
-- 응답: 7.1의 장소 필드 + `reasons: string[]`, `taxiStands: {name, description}[]`, `events: DemandEvent[]`
+- 응답: 7.1의 장소 필드 + `generatedAt`, `source`, `reasons: string[]`, `taxiStands: {name, description}[]`, `events: DemandEvent[]`
 - `reasons` 예: "T1 입국 1,800명 예상 (23:00~24:00)", "KSPO DOME 공연 종료 22:10, 좌석 15,000석", "2호선 막차 이후 체류 인구 3.1만 명"
 - 없는 `id`는 404
 
@@ -208,6 +209,8 @@ API별 인증 필요 여부:
 - 쿼리: `from`, `to`(기본: 지금 ~ 한국 시간 오늘 자정), `bbox`, `type=airport|concert|last_train`
 - 기본 동작: 오늘이면서 `endsAt`이 지나지 않은 이벤트, `peakAt` 오름차순
 - `last_train`은 `last_trains` 표에서 요청 시 생성 (요일 구분 `day_type` 반영)
+- `from`, `to`는 타임존이 포함된 ISO만 허용 (없으면 422). 기간과 겹치는 이벤트(`endsAt ≥ from`, `peakAt < to`)를 돌려준다
+- 응답: `{ generatedAt, source, events: DemandEvent[] }`
 
 | 필드 | 타입 | 예시 |
 |---|---|---|
@@ -227,6 +230,7 @@ API별 인증 필요 여부:
   2. 이동시간 60분 이하, 도착 시각이 `endsAt` 이전
   3. `surgeIndexAtArrival` 내림차순, 같으면 `travelMinutes` 오름차순
 - 이동시간은 5장의 `travel_minutes()` 사용
+- 응답: `{ generatedAt, source, alerts: DemandAlert[] }`
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
