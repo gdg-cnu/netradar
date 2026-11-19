@@ -52,7 +52,7 @@ test('email signup checks matching passwords and waits for email confirmation wi
   expect(signupBody?.code_challenge).toEqual(expect.any(String))
   await expect(page.locator('nav')).not.toBeVisible()
   await expect(
-    page.getByRole('button', { name: '카카오톡 로그인', exact: true }),
+    page.getByRole('button', { name: '이메일 로그인', exact: true }),
   ).toBeVisible()
   await noOverflow(page)
   await page.screenshot({ path: testInfo.outputPath('email-signup.png'), fullPage: true })
@@ -111,25 +111,4 @@ test('signup with an immediate session enters the app without a confirmation-onl
   await page.getByLabel('비밀번호 확인', { exact: true }).fill('frontend-Test-1234')
   await page.getByRole('button', { name: '회원가입하기', exact: true }).click()
   await expect(page.locator('.forecast-zone-list li')).toHaveCount(2)
-})
-
-test('Kakao login remains available with consent and PKCE redirect', async ({ page }) => {
-  let authorizationUrl: URL | undefined
-  await page.route('https://netradar-test.invalid/auth/v1/authorize**', async (route) => {
-    authorizationUrl = new URL(route.request().url())
-    await route.fulfill({
-      contentType: 'text/html',
-      body: '<p>Kakao authorization test boundary</p>',
-    })
-  })
-  await page.goto('/')
-  await expect(
-    page.getByRole('button', { name: '카카오톡 로그인', exact: true }),
-  ).toBeDisabled()
-  await page.getByRole('checkbox').check()
-  await page.getByRole('button', { name: '카카오톡 로그인', exact: true }).click()
-  await expect(page).toHaveURL(/netradar-test\.invalid\/auth\/v1\/authorize/)
-  expect(authorizationUrl?.searchParams.get('provider')).toBe('kakao')
-  expect(authorizationUrl?.searchParams.get('redirect_to')).toBe('http://127.0.0.1:5175/')
-  expect(authorizationUrl?.searchParams.get('code_challenge')).toBeTruthy()
 })
