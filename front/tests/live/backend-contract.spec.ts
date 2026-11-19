@@ -166,7 +166,7 @@ test('profile server failures cannot become a new account and unauthorized sessi
   failure = 401
   await page.getByRole('button', { name: '다시 불러오기', exact: true }).click()
   await expect(
-    page.getByRole('button', { name: '카카오톡 로그인', exact: true }),
+    page.getByRole('button', { name: '이메일로 로그인', exact: true }),
   ).toBeVisible()
   await expect(page.getByRole('alert')).toContainText('로그인이 만료')
   await expect(page.getByRole('button', { name: '데모로 둘러보기' })).not.toBeVisible()
