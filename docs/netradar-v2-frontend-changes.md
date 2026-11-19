@@ -13,7 +13,7 @@
 | 라우팅 | 해시 라우팅(`#/map`) 직접 구현 | react-router | 유지 가능 (결정 필요 2) |
 | 목업 | `apiRequest`의 데모 모드 fallback | MSW | 유지 가능. 데모 데이터만 교체 |
 | 서버 상태 | 훅마다 `useState` + `AbortController` | TanStack Query | 유지 가능 |
-| 인증 | Supabase 카카오 + 이메일 로그인, 데모 로그인 | 카카오 로그인 | 유지 |
+| 인증 | Supabase 이메일 로그인, 데모 로그인 (카카오 로그인 제거) | 카카오 로그인 | 이메일·비밀번호로 확정 |
 | 필드 표기 | camelCase | API 명세는 snake_case | 백엔드와 통일 필요 (결정 필요 3, 최우선) |
 | 핵심 지표 | 순시급(`netHourly`), 승객 수 | 수요 지수, 인구 | 교체 |
 | 로컬 저장 | `drive`·`route-draft`·`trips`·`profile`을 localStorage에 저장, 읽을 때 검증 실패 시 버림 | - | 타입 변경 시 기존 저장값 처리 필요 (3.6) |
@@ -151,7 +151,7 @@
 2. 라우팅·목업·서버 상태: 현재 방식(해시 라우팅, 데모 모드, useState) 유지 vs 계획서 방식(react-router, MSW, TanStack Query). 4주 일정상 유지를 권장
 3. 필드 표기: camelCase(현재 프론트) vs snake_case(명세). snake_case로 가면 모든 응답 검증 함수(`isRoutePlan`, `isTripRecord`, `isProfile`, `normalizeForecastResponse`)와 타입을 고쳐야 해 사실상 서비스 계층 전체 재작성. 백엔드 응답을 camelCase로 맞추는 쪽을 권장하며 가장 먼저 확정
 4. 시급·요금·추가 수익 표시를 보조 지표로 남길지. `RouteResults`, `DrivePage`, `DriveSummary`, `RideCard`, `ReplayPage`, `isDriveTotals`, 정산값 필수 검증의 범위가 달라지므로 작업 순서 5 전에 확정
-5. 이메일 로그인 유지 여부
+5. 이메일 로그인 유지 여부 → 이메일·비밀번호만 사용, 카카오 로그인 제거로 확정
 6. 기존 로컬 저장 데이터(진행 중 운행, 운행 기록) 처리: 버림 vs 변환 (3.6)
 
 ## 9. 작업 순서
