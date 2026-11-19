@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import forecast, profile, places, routes, trips
+from routers import demand, forecast, profile, places, routes, trips
 
 
 app = FastAPI(
     title="NetRadar API",
-    description="택시 기사를 위한 예상 시급 및 동선 추천 서비스 API",
+    description="택시 기사를 위한 수요 급증 예보 및 동선 추천 서비스 API",
     version="1.0.0",
 )
 
@@ -20,7 +20,7 @@ app.add_middleware(
         "http://127.0.0.1:4173",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
         "Authorization",
         "Content-Type",
@@ -41,6 +41,7 @@ def health():
     return {"status": "ok"}
 
 
+app.include_router(demand.router, prefix="/api/v1")
 app.include_router(forecast.router, prefix="/api/v1")
 app.include_router(profile.router, prefix="/api/v1")
 app.include_router(places.router, prefix="/api/v1")
