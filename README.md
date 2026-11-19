@@ -21,16 +21,16 @@ v2 실제 연동에는 백엔드 API 경로·필드명·범위 구간·좌표 �
 
 ### 실행
 
-Node.js 24 LTS와 pnpm 11.25.0을 권장합니다. 최소 Node.js 버전은 22.12.0입니다.
+Node.js 24 LTS와 npm 12.2.3을 권장합니다. 최소 Node.js 버전은 22.12.0입니다.
 
 프런트엔드 관련 파일은 모두 `front/` 폴더에 있으며, 아래 명령은 `front/`에서 실행합니다.
 
 ```sh
-npm install -g pnpm@11.25.0
+npm install -g npm@12.2.3
 cd front
-pnpm install --frozen-lockfile
+npm ci
 cp .env.example .env.local
-pnpm dev
+npm run dev
 ```
 
 이용·저장 안내를 확인한 뒤 **데모로 둘러보기**를 누르면 시작합니다.
@@ -38,17 +38,17 @@ pnpm dev
 v2 지도는 인천공항·김포공항·공연장·서울역·홍대입구역·강남역의 대표 예시 6곳을 제공합니다. 즐겨찾기 편집은 기존 프로필 흐름을 재사용합니다.
 
 ```sh
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm preview
+npm run typecheck
+npm test
+npm run build
+npm run preview
 # 처음 한 번 테스트용 Chromium 설치
-pnpm exec playwright install chromium
-pnpm test:e2e
+npx playwright install chromium
+npm run test:e2e
 # API 호출·인증 경로 검증 (실제 메일/계정/DB 대신 격리된 테스트 응답 사용)
-pnpm test:e2e:live
+npm run test:e2e:live
 # v2 목업 전체 흐름 (데스크톱·모바일·320px·가로 화면)
-pnpm test:e2e:v2
+npm run test:e2e:v2
 ```
 
 단위 테스트는 예측 계산·H3 격자·순위·운행 상태 전이·저장 복구·계정 격리를 확인합니다.
