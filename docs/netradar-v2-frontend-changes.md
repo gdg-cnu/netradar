@@ -134,7 +134,7 @@
 
 ## 7. 테스트 수정
 
-이 작업을 하면 `pnpm test`, `pnpm test:e2e`, `pnpm test:e2e:live`가 대부분 실패하므로 함께 수정한다.
+이 작업을 하면 `npm test`, `npm run test:e2e`, `npm run test:e2e:live`가 대부분 실패하므로 함께 수정한다.
 
 | 파일 | 현재 | 변경 |
 |---|---|---|

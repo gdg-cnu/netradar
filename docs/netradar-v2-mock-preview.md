@@ -5,7 +5,7 @@
 
 ## 실행과 확인
 
-`front/`에서 `pnpm install --frozen-lockfile` 후 `.env.example`을 `.env.local`로 복사하고 `pnpm dev`를 실행한다.
+`front/`에서 `npm ci` 후 `.env.example`을 `.env.local`로 복사하고 `npm run dev`를 실행한다.
 `VITE_API_MODE=demo`, `VITE_DEMO_VERSION=v2`(기본값)에서 이용 안내에 동의하고 **데모로 둘러보기**를 선택한다.
 
 1. 수요 지도: 수요 지수/인구, 지금/+30/+60분, 장소 검색·지도 이동·목록·상세를 확인한다. 온라인 타일이 실패해도 목록·상세는 이용할 수 있다.
@@ -44,6 +44,6 @@ v2 운행은 완료 상태와 기록을 같은 저장 문서에 반영하며 ID�
 
 ## 검증 명령
 
-`front/`에서 `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm format:check`, `pnpm test:e2e:v2`를 실행한다.
-`pnpm test:e2e`는 기존 v1 데모 회귀, `pnpm test:e2e:live`는 격리된 v1 HTTP·인증 응답 회귀를 확인한다. 실제 인증·메일·운영 DB·예측 데이터 통합 검증을 대체하지 않는다.
+`front/`에서 `npm run typecheck`, `npm test`, `npm run build`, `npm run format:check`, `npm run test:e2e:v2`를 실행한다.
+`npm run test:e2e`는 기존 v1 데모 회귀, `npm run test:e2e:live`는 격리된 v1 HTTP·인증 응답 회귀를 확인한다. 실제 인증·메일·운영 DB·예측 데이터 통합 검증을 대체하지 않는다.
 구주제 WBS 4.1~4.5의 진행률은 v2 완료율로 전용하지 않는다.
