@@ -4,13 +4,11 @@ import TermsDialog from '../components/common/TermsDialog'
 import { isDemoMode } from '../services/api'
 import {
   signInWithEmail,
-  signInWithKakao,
   signUpWithEmail,
   supabase,
 } from '../services/auth'
 import { emailAuthErrorMessage, validateEmailAuth } from '../utils/authForm'
 import type { AuthFieldErrors, EmailAuthFields, EmailAuthMode } from '../utils/authForm'
-import { assetUrl } from '../utils/assets'
 import { isV2Preview } from '../v2/mode'
 
 export default function LoginPage({
@@ -22,7 +20,7 @@ export default function LoginPage({
 }) {
   const [agreed, setAgreed] = useState(false)
   const [showTerms, setShowTerms] = useState(false)
-  const [pending, setPending] = useState<'kakao' | EmailAuthMode | null>(null)
+  const [pending, setPending] = useState<EmailAuthMode | null>(null)
   const [mode, setMode] = useState<EmailAuthMode>('signin')
   const [fields, setFields] = useState<EmailAuthFields>({
     name: '',
@@ -41,7 +39,9 @@ export default function LoginPage({
   const legalLinksReady = Boolean(
     termsUrl?.startsWith('https://') && privacyUrl?.startsWith('https://'),
   )
-  const authReady = Boolean(supabase && legalLinksReady)
+  // Local dev server only: allow sign-in before the final policy pages are published.
+  // Production builds still require both https policy URLs.
+  const authReady = Boolean(supabase && (legalLinksReady || import.meta.env.DEV))
 
   useEffect(() => {
     mounted.current = true
@@ -68,27 +68,6 @@ export default function LoginPage({
     setFieldErrors({})
     setError('')
     setNotice('')
-  }
-
-  async function kakaoLogin() {
-    if (!agreed || !authReady || requestInFlight.current) return
-    requestInFlight.current = true
-    setPending('kakao')
-    setError('')
-    setNotice('')
-    try {
-      await signInWithKakao()
-    } catch (cause) {
-      requestInFlight.current = false
-      if (mounted.current) {
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : '로그인하지 못했습니다. 다시 시도해 주세요.',
-        )
-        setPending(null)
-      }
-    }
   }
 
   async function submitEmail(event: React.FormEvent<HTMLFormElement>) {
@@ -181,17 +160,6 @@ export default function LoginPage({
               이용 및 저장 안내 보기
             </button>
           )}
-        </div>
-        <button
-          className="kakao-button"
-          disabled={!agreed || Boolean(pending) || !authReady}
-          onClick={kakaoLogin}
-        >
-          <img src={assetUrl('ac89b.png')} alt="" />
-          {pending === 'kakao' ? '카카오로 이동 중…' : '카카오톡 로그인'}
-        </button>
-        <div className="auth-divider">
-          <span>또는 이메일로 시작하기</span>
         </div>
         <section className="email-auth" aria-labelledby={`${formId}-heading`}>
           <div

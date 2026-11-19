@@ -52,7 +52,7 @@ export function createTestSession() {
     role: 'authenticated',
     email: 'frontend-test@example.invalid',
     created_at: '2026-01-01T00:00:00Z',
-    app_metadata: { provider: 'kakao', providers: ['kakao'] },
+    app_metadata: { provider: 'email', providers: ['email'] },
     user_metadata: { full_name: profile.name },
   }
   const expiresAt = Math.floor(Date.now() / 1000) + 3600

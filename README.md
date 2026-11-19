@@ -19,51 +19,95 @@
 v2 실제 연동에는 백엔드 API 경로·필드명·범위 구간·좌표 규약 확인이 필요합니다. 기존 v1 운행·기록은 삭제하거나 변환하지 않고 보존하며, v2 모의 운행과 알림 설정은 계정별 별도 저장 공간을 사용합니다.
 `VITE_API_MODE=live`는 기존 v1 API와 화면을 유지합니다. v2 목업을 live 오류의 대체 응답으로 사용하지 않습니다. 아래 API·WBS 표도 v1 구현 기준이며 v2 완료율을 뜻하지 않습니다. 운영 인증·예측 데이터 통합 검증은 별도로 남아 있습니다.
 
-### 실행
+### 로컬에서 서버 켜기
 
-Node.js 24 LTS와 npm 12.2.3을 권장합니다. 최소 Node.js 버전은 22.12.0입니다.
+프런트엔드(`front/`)와 백엔드(`backend/`)는 따로 켭니다. **화면만 볼 때는 프런트엔드만** 켜면 됩니다.
 
-프런트엔드 관련 파일은 모두 `front/` 폴더에 있으며, 아래 명령은 `front/`에서 실행합니다.
+| 하고 싶은 것 | 켜야 하는 서버 | 주소 |
+| --- | --- | --- |
+| v2 목업 화면 둘러보기 | 프런트엔드 | http://localhost:5173 |
+| 백엔드 API 확인 (v2 목업 API 포함) | 백엔드 | http://localhost:8000/docs |
+| 실제 로그인 + 서버 저장 (v1 화면) | 프런트엔드 + 백엔드 | http://localhost:5173 |
+
+#### 준비물
+
+- Node.js 24 LTS (최소 22.12.0), npm 12.2.3
+- Python 3.12 이상 (3.14에서 확인)
+
+#### 1. 프론트엔드
+
+처음 한 번:
 
 ```sh
 npm install -g npm@12.2.3
 cd front
 npm ci
-cp .env.example .env.local
+cp .env.example .env.local      # Windows PowerShell: Copy-Item .env.example .env.local
+```
+
+서버 켜기:
+
+```sh
+cd front
 npm run dev
 ```
 
-이용·저장 안내를 확인한 뒤 **데모로 둘러보기**를 누르면 시작합니다.
-실제 위치 권한을 거절해도 장소 검색으로 출발지를 선택할 수 있습니다.
-v2 지도는 인천공항·김포공항·공연장·서울역·홍대입구역·강남역의 대표 예시 6곳을 제공합니다. 즐겨찾기 편집은 기존 프로필 흐름을 재사용합니다.
+http://localhost:5173 에서 이용·저장 안내에 동의하고 **데모로 둘러보기**를 누르면 v2 목업 화면이 시작됩니다.
+기본값(`VITE_API_MODE=demo`, `VITE_DEMO_VERSION=v2`)은 백엔드 없이 동작합니다. 끌 때는 터미널에서 `Ctrl + C`.
+
+#### 2. 백엔드
+
+처음 한 번:
 
 ```sh
+cd backend
+python -m venv .venv
+# Windows: .venvScriptsactivate   /   macOS·Linux: source .venv/bin/activate
+pip install -r requirements.txt pytest
+cp .env.example .env            # Windows PowerShell: Copy-Item .env.example .env
+```
+
+서버 켜기 (가상환경을 켠 상태에서):
+
+```sh
+cd backend
+uvicorn main:app --reload --port 8000
+```
+
+- http://localhost:8000/docs 에서 API 목록을 보고 직접 호출해 볼 수 있습니다.
+- `backend/.env` 값이 비어 있어도 서버는 켜집니다. v2 목업 API(`/api/v1/heatmap`, `/events`, `/alerts/top`, `/config`, `/places/{id}`)는 바로 동작합니다.
+- 로그인이 필요한 API(`/me/*`, `/trips*`)는 `SUPABASE_*` 값이, v1 동선 추천은 `KAKAO_MOBILITY_REST_API_KEY`가 필요합니다. 각 항목 설명은 `backend/.env.example`에 있습니다.
+
+#### 3. 실제 로그인까지 확인하기
+
+1. `front/.env.local`에 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`를 넣습니다. 개발 서버에서는 약관 URL 없이도 로그인 버튼이 켜집니다.
+2. 서버 저장까지 쓰려면 `VITE_API_MODE=live`로 바꾸고 백엔드도 켭니다 (`VITE_API_BASE_URL=http://localhost:8000/api/v1`). 이 모드는 아직 v1 화면입니다.
+3. `.env.local`을 바꾼 뒤에는 `npm run dev`를 다시 켜야 반영됩니다.
+4. 이메일 인증 링크가 로컬 앱으로 돌아오도록 Supabase → Authentication → URL Configuration에 `http://localhost:5173`을 등록합니다.
+
+#### 테스트
+
+```sh
+# 백엔드 (backend/, 가상환경 켠 상태)
+python -m pytest
+
+# 프런트엔드 (front/)
 npm run typecheck
 npm test
 npm run build
-npm run preview
-# 처음 한 번 테스트용 Chromium 설치
-npx playwright install chromium
-npm run test:e2e
-# API 호출·인증 경로 검증 (실제 메일/계정/DB 대신 격리된 테스트 응답 사용)
-npm run test:e2e:live
-# v2 목업 전체 흐름 (데스크톱·모바일·320px·가로 화면)
-npm run test:e2e:v2
+npx playwright install chromium   # 처음 한 번
+npm run test:e2e                  # v1 데모 흐름
+npm run test:e2e:live             # API 호출·인증 경로 (격리된 테스트 응답 사용)
+npm run test:e2e:v2               # v2 목업 전체 흐름
 ```
 
-단위 테스트는 예측 계산·H3 격자·순위·운행 상태 전이·저장 복구·계정 격리를 확인합니다.
-브라우저 테스트는 데스크톱과 모바일에서 지도→격자 상세→동선→운행 종료→기록,
-프로필·즐겨찾기 저장, 동의·로그아웃, 지도 타일 장애 대응을 확인합니다.
-`test:e2e:live`는 실제 API 모드로 빌드하여 Bearer 헤더, 신규 프로필 404→등록·실패 후 재시도,
-서버 예시 예측·경로선, 이메일 로그인·회원가입·인증 메일 대기·카카오 PKCE 이동을 검증합니다.
-테스트의 인증 서버는 예약된 `.invalid` 도메인이며 외부 회원가입이나 메일 발송을 하지 않습니다.
-실제 Supabase/Kakao 및 운영 DB 검증을 대신하지 않습니다.
+브라우저 테스트의 인증 서버는 예약된 `.invalid` 도메인이며 실제 회원가입이나 메일 발송을 하지 않습니다.
 
 ### 기존 v1 WBS 구현 범위
 
 | WBS                           | 프런트엔드 구현                                                                                                                        | 실제 서비스 연결에서 남은 일                                   |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| 4.1 앱 골격·로그인·마이페이지 | 카카오·이메일 로그인/회원가입, 이메일 확인 안내, 라우트·새로고침 복구, 동의·위치 UI, Bearer 요청, 신규 프로필 등록, 차종·즐겨찾기·기록 | 실제 Supabase/Kakao/메일 설정, 확정 약관, 운영 사용자 API 검증 |
+| 4.1 앱 골격·로그인·마이페이지 | 이메일 로그인/회원가입, 이메일 확인 안내, 라우트·새로고침 복구, 동의·위치 UI, Bearer 요청, 신규 프로필 등록, 차종·즐겨찾기·기록 | 실제 Supabase/메일 설정, 확정 약관, 운영 사용자 API 검증 |
 | 4.2 시급 지도                 | Leaflet·H3 해상도 8, 지표/시간 필터, 순위·위치·타일 장애 대응, 서버 예시 응답 호환과 구역별 출처 표시                                  | 실제 AI 예측 데이터·운영 지도 설정 검증                        |
 | 4.3 격자 상세                 | 추천 이유, 매출·비용·순시급, 시간 추이, 동선 연결, 서버 예시값·선택 시간대 검증과 출처 안내                                            | 실제 모델 계산 결과와 운영 API 검증                            |
 | 4.4 동선 설정·추천 결과       | 장소·즐겨찾기 검색, 15/30/50% 우회, 기본/추천 경로선 비교, 시간·거리·수익·경유지, 재추천·안내 시작, 예시 검색/수익 안내                | 실제 장소 검색·Kakao 도로 경로·운영 추천 품질 검증             |
@@ -90,18 +134,16 @@ npm run test:e2e:v2
 | `VITE_SUPABASE_ANON_KEY`             | 브라우저 공개용 anon/publishable 키                                             |
 | `VITE_TERMS_URL`, `VITE_PRIVACY_URL` | 확정된 약관·개인정보 처리방침 HTTPS URL                                         |
 
-서비스 역할 키나 카카오 Client Secret을 `VITE_` 변수에 넣으면 안 됩니다. 해당 값은 서버/인증 제공자 설정에서 관리합니다.
-실제 카카오 로그인은 Supabase의 Kakao 공급자, Kakao 앱 콜백, 배포 주소의 Redirect URL을 설정해야 합니다.
-이메일 로그인·회원가입은 같은 Supabase 프로젝트의 Email 공급자를 사용합니다. 회원가입 시 이름을 `user_metadata.full_name`에 전달합니다.
+서비스 역할 키를 `VITE_` 변수에 넣으면 안 됩니다. 해당 값은 서버 설정에서 관리합니다.
+로그인·회원가입은 이메일·비밀번호 방식만 지원하며 Supabase 프로젝트의 Email 공급자를 사용합니다. 회원가입 시 이름을 `user_metadata.full_name`에 전달합니다.
 가입 응답에 세션이 없으면 확인 메일을 안내하고, 세션이 반환된 경우에는 앱으로 진입합니다.
 현재 PKCE 구성에서는 Email 공급자의 이메일 확인을 켜고 실제 확인 링크 복귀까지 검증해야 합니다.
 Supabase의 Site URL/Redirect URLs에 실제 앱 주소를 등록하고 메일 발신 설정을 구성해야 합니다.
 비밀번호는 Supabase 인증 요청으로만 전송하며 앱의 프로필·운행 저장소에는 기록하지 않습니다.
 앱은 PKCE 방식의 Supabase 세션을 사용하고, API에 Bearer 토큰을 전달합니다.
-인증과 약관 URL이 준비되지 않은 환경에서는 정식 로그인 버튼이 비활성화됩니다.
+인증과 약관 URL이 준비되지 않은 환경에서는 정식 로그인 버튼이 비활성화됩니다. 단, 개발 서버(`npm run dev`)에서는 약관 URL 없이도 로그인할 수 있습니다.
 
-설정 참고: [Supabase 카카오 로그인](https://supabase.com/docs/guides/auth/social-sign-in/auth-kakao),
-[이메일·비밀번호 인증](https://supabase.com/docs/guides/auth/passwords),
+설정 참고: [이메일·비밀번호 인증](https://supabase.com/docs/guides/auth/passwords),
 [Redirect URL 설정](https://supabase.com/docs/guides/auth/redirect-urls).
 
 ### 백엔드 연결 계약과 검증 범위
