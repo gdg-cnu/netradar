@@ -4,4 +4,4 @@ dist
 test-results
 playwright-report
 public/assets
-pnpm-lock.yaml
+package-lock.json
