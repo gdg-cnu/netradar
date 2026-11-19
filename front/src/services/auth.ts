@@ -21,18 +21,6 @@ export async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null
 }
 
-export async function signInWithKakao() {
-  if (!supabase)
-    throw new Error(
-      '카카오 로그인 연결이 준비되지 않았습니다. 데모로 화면을 확인할 수 있습니다.',
-    )
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'kakao',
-    options: { redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}` },
-  })
-  if (error) throw error
-}
-
 export async function signInWithEmail(email: string, password: string) {
   if (!supabase) throw new Error('이메일 로그인 연결이 준비되지 않았습니다.')
   const { data, error } = await supabase.auth.signInWithPassword({
