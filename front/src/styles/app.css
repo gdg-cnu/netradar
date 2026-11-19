@@ -73,26 +73,8 @@
   color: #87482a;
   text-decoration: underline;
 }
-.login-panel .kakao-button {
-  margin-top: 24px;
-}
 .demo-login {
   margin-top: 12px;
-}
-.auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 24px 0 18px;
-  color: #777;
-  font-size: 12px;
-}
-.auth-divider::before,
-.auth-divider::after {
-  content: '';
-  height: 1px;
-  flex: 1;
-  background: #e7e7e7;
 }
 .auth-mode-options {
   display: grid;
@@ -118,6 +100,9 @@
   margin: 20px 0 16px;
   font-size: 18px;
   font-weight: 800;
+}
+.email-auth {
+  margin-top: 24px;
 }
 .email-auth-form {
   display: grid;
