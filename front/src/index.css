@@ -820,24 +820,6 @@
   color: var(--muted);
   line-height: 1.7;
 }
-.kakao-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  height: 56px;
-  margin-top: 36px;
-  border-radius: 12px;
-  color: #241d00;
-  background: #fee500;
-  font-size: 16px;
-  font-weight: 800;
-}
-.kakao-button img {
-  width: 19px;
-  height: 18px;
-}
 .login-panel small {
   margin-top: 18px;
   color: #aaa;
@@ -1054,9 +1036,6 @@
   .login-panel h1,
   .login-panel > p {
     display: none;
-  }
-  .kakao-button {
-    margin-top: 0;
   }
   .login-panel small {
     margin-top: 18px;
