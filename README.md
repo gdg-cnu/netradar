@@ -19,45 +19,89 @@
 v2 실제 연동에는 백엔드 API 경로·필드명·범위 구간·좌표 규약 확인이 필요합니다. 기존 v1 운행·기록은 삭제하거나 변환하지 않고 보존하며, v2 모의 운행과 알림 설정은 계정별 별도 저장 공간을 사용합니다.
 `VITE_API_MODE=live`는 기존 v1 API와 화면을 유지합니다. v2 목업을 live 오류의 대체 응답으로 사용하지 않습니다. 아래 API·WBS 표도 v1 구현 기준이며 v2 완료율을 뜻하지 않습니다. 운영 인증·예측 데이터 통합 검증은 별도로 남아 있습니다.
 
-### 실행
+### 로컬에서 서버 켜기
 
-Node.js 24 LTS와 npm 12.2.3을 권장합니다. 최소 Node.js 버전은 22.12.0입니다.
+프런트엔드(`front/`)와 백엔드(`backend/`)는 따로 켭니다. **화면만 볼 때는 프런트엔드만** 켜면 됩니다.
 
-프런트엔드 관련 파일은 모두 `front/` 폴더에 있으며, 아래 명령은 `front/`에서 실행합니다.
+| 하고 싶은 것 | 켜야 하는 서버 | 주소 |
+| --- | --- | --- |
+| v2 목업 화면 둘러보기 | 프런트엔드 | http://localhost:5173 |
+| 백엔드 API 확인 (v2 목업 API 포함) | 백엔드 | http://localhost:8000/docs |
+| 실제 로그인 + 서버 저장 (v1 화면) | 프런트엔드 + 백엔드 | http://localhost:5173 |
+
+#### 준비물
+
+- Node.js 24 LTS (최소 22.12.0), npm 12.2.3
+- Python 3.12 이상 (3.14에서 확인)
+
+#### 1. 프론트엔드
+
+처음 한 번:
 
 ```sh
 npm install -g npm@12.2.3
 cd front
 npm ci
-cp .env.example .env.local
+cp .env.example .env.local      # Windows PowerShell: Copy-Item .env.example .env.local
+```
+
+서버 켜기:
+
+```sh
+cd front
 npm run dev
 ```
 
-이용·저장 안내를 확인한 뒤 **데모로 둘러보기**를 누르면 시작합니다.
-실제 위치 권한을 거절해도 장소 검색으로 출발지를 선택할 수 있습니다.
-v2 지도는 인천공항·김포공항·공연장·서울역·홍대입구역·강남역의 대표 예시 6곳을 제공합니다. 즐겨찾기 편집은 기존 프로필 흐름을 재사용합니다.
+http://localhost:5173 에서 이용·저장 안내에 동의하고 **데모로 둘러보기**를 누르면 v2 목업 화면이 시작됩니다.
+기본값(`VITE_API_MODE=demo`, `VITE_DEMO_VERSION=v2`)은 백엔드 없이 동작합니다. 끌 때는 터미널에서 `Ctrl + C`.
+
+#### 2. 백엔드
+
+처음 한 번:
 
 ```sh
+cd backend
+python -m venv .venv
+# Windows: .venvScriptsactivate   /   macOS·Linux: source .venv/bin/activate
+pip install -r requirements.txt pytest
+cp .env.example .env            # Windows PowerShell: Copy-Item .env.example .env
+```
+
+서버 켜기 (가상환경을 켠 상태에서):
+
+```sh
+cd backend
+uvicorn main:app --reload --port 8000
+```
+
+- http://localhost:8000/docs 에서 API 목록을 보고 직접 호출해 볼 수 있습니다.
+- `backend/.env` 값이 비어 있어도 서버는 켜집니다. v2 목업 API(`/api/v1/heatmap`, `/events`, `/alerts/top`, `/config`, `/places/{id}`)는 바로 동작합니다.
+- 로그인이 필요한 API(`/me/*`, `/trips*`)는 `SUPABASE_*` 값이, v1 동선 추천은 `KAKAO_MOBILITY_REST_API_KEY`가 필요합니다. 각 항목 설명은 `backend/.env.example`에 있습니다.
+
+#### 3. 실제 로그인까지 확인하기
+
+1. `front/.env.local`에 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`를 넣습니다. 개발 서버에서는 약관 URL 없이도 로그인 버튼이 켜집니다.
+2. 서버 저장까지 쓰려면 `VITE_API_MODE=live`로 바꾸고 백엔드도 켭니다 (`VITE_API_BASE_URL=http://localhost:8000/api/v1`). 이 모드는 아직 v1 화면입니다.
+3. `.env.local`을 바꾼 뒤에는 `npm run dev`를 다시 켜야 반영됩니다.
+4. 이메일 인증 링크가 로컬 앱으로 돌아오도록 Supabase → Authentication → URL Configuration에 `http://localhost:5173`을 등록합니다.
+
+#### 테스트
+
+```sh
+# 백엔드 (backend/, 가상환경 켠 상태)
+python -m pytest
+
+# 프런트엔드 (front/)
 npm run typecheck
 npm test
 npm run build
-npm run preview
-# 처음 한 번 테스트용 Chromium 설치
-npx playwright install chromium
-npm run test:e2e
-# API 호출·인증 경로 검증 (실제 메일/계정/DB 대신 격리된 테스트 응답 사용)
-npm run test:e2e:live
-# v2 목업 전체 흐름 (데스크톱·모바일·320px·가로 화면)
-npm run test:e2e:v2
+npx playwright install chromium   # 처음 한 번
+npm run test:e2e                  # v1 데모 흐름
+npm run test:e2e:live             # API 호출·인증 경로 (격리된 테스트 응답 사용)
+npm run test:e2e:v2               # v2 목업 전체 흐름
 ```
 
-단위 테스트는 예측 계산·H3 격자·순위·운행 상태 전이·저장 복구·계정 격리를 확인합니다.
-브라우저 테스트는 데스크톱과 모바일에서 지도→격자 상세→동선→운행 종료→기록,
-프로필·즐겨찾기 저장, 동의·로그아웃, 지도 타일 장애 대응을 확인합니다.
-`test:e2e:live`는 실제 API 모드로 빌드하여 Bearer 헤더, 신규 프로필 404→등록·실패 후 재시도,
-서버 예시 예측·경로선, 이메일 로그인·회원가입·인증 메일 대기를 검증합니다.
-테스트의 인증 서버는 예약된 `.invalid` 도메인이며 외부 회원가입이나 메일 발송을 하지 않습니다.
-실제 Supabase 및 운영 DB 검증을 대신하지 않습니다.
+브라우저 테스트의 인증 서버는 예약된 `.invalid` 도메인이며 실제 회원가입이나 메일 발송을 하지 않습니다.
 
 ### 기존 v1 WBS 구현 범위
 
