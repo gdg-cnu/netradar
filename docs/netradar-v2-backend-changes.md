@@ -125,6 +125,26 @@ AI 모듈이 완성되기 전에는 같은 시그니처의 목업 구현(직선�
 | CORS (`main.py`) | 현재 `GET, POST, PATCH, OPTIONS` → `PUT`, `DELETE` 추가 (`/me/places`) |
 | 서비스 설명 (`main.py`) | "예상 시급 및 동선 추천" → "택시 수요 급증 예보" |
 
+### 6.1 인증
+
+회원가입·로그인은 프론트가 Supabase Auth로 직접 처리한다 (카카오 + 이메일, `front/src/services/auth.ts`). 백엔드에는 회원가입·로그인 API를 만들지 않는다. v2에서도 이 구조를 유지한다.
+
+| 항목 | 현재 | v2 |
+|---|---|---|
+| 토큰 전달 | `Authorization: Bearer <Supabase access token>` | 유지 |
+| 토큰 확인 | `backend/db/auth.py`의 `get_current_user`가 Supabase에 사용자 확인, 실패 시 401 | 유지. 인증이 필요한 새 API에 같은 의존성 사용 |
+| DB 접근 | 프로필은 사용자 토큰으로 Supabase REST(RLS 적용), 운행은 service role | 유지. service role로 쓰는 쿼리는 반드시 `user_id`로 거른다 |
+| 첫 로그인 | `GET /me/profile` 404 → 프론트가 프로필 등록 화면 → `PATCH /me/profile`로 생성 | `GET /me` 404 → 등록 화면 → `PATCH /me`로 생성. 404 의미를 바꾸지 않는다 |
+| 회원 탈퇴 | 없음. `profiles`·`trips`는 `auth.users` 삭제 시 함께 삭제(`ON DELETE CASCADE`) | 탈퇴 API를 만들지 결정 (결정 11) |
+
+API별 인증 필요 여부:
+
+| 구분 | API | 비고 |
+|---|---|---|
+| 로그인 필요 | `/me`, `/me/places`, `/me/settings`, `/trips`, `/trips/{id}/events`, `/replay/calendar`, `/replay/days/{date}` | 사용자별 데이터. 다른 사용자 데이터 접근 시 404 (존재 여부를 드러내지 않음) |
+| 로그인 불필요 | `/heatmap`, `/places/{id}`, `/places/search`, `/events`, `/alerts/top`, `/config` | 공개 예보 데이터. `/alerts/top`의 위치는 저장하지 않는다 |
+| 결정 필요 | `/routes/recommend` | 현재 `/routes/recommendations`는 인증 없음. 카카오모빌리티·카카오 로컬 호출 비용이 들므로 인증을 걸거나 호출 제한 필요 (결정 10) |
+
 ---
 
 ## 7. 추가할 API
@@ -373,6 +393,7 @@ AI 모듈이 완성되기 전에는 같은 시그니처의 목업 구현(직선�
 | `/routes/recommend` | 목적지 없음, `targetPlaceId` 첫 경유지, 60분 초과 시 `null`, detour별 경유지 수 |
 | `/trips` 이벤트 | 새 이벤트 타입, 요금 `null` 허용, 합계 필드 |
 | `/replay/days` | 관측 없는 시점 `null`, 인구 없는 장소 처리 |
+| 인증 | 로그인 필요 API에 토큰 없음·만료 시 401, 다른 사용자의 운행·기록 조회 시 404, 공개 API는 토큰 없이 200 |
 
 ---
 
@@ -387,6 +408,8 @@ AI 모듈이 완성되기 전에는 같은 시그니처의 목업 구현(직선�
 7. 급증 알림 설정 저장: 서버 vs 브라우저 (현재 프론트는 브라우저 저장)
 8. v1 API 제거 시점
 9. 마이그레이션 위치: `supabase/` vs `backend/migrations/`
+10. `/routes/recommend` 인증: 로그인 필요 vs 공개 + 호출 제한
+11. 인증 범위: 이메일 로그인 유지 여부 (프론트 문서 결정 5), 회원 탈퇴 API 필요 여부
 
 ---
 
