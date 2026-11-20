@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 // Exercise the real HTTP/auth client branch with isolated, intercepted test services.
-// This suite does not authenticate against Kakao or write to a real Supabase project.
+// This suite does not authenticate against a real auth provider or write to a real Supabase project.
 export default defineConfig({
   testDir: './tests/live',
   outputDir: './.cache/test-results-live',
@@ -14,6 +14,8 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:5175',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
+    // 서비스 워커가 page.route 응답 가로채기를 우회하지 않도록 기본 차단합니다(PWA 테스트만 허용).
+    serviceWorkers: 'block',
     launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH },
   },
   projects: [

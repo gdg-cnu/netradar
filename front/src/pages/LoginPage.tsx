@@ -2,11 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import Brand from '../components/common/Brand'
 import TermsDialog from '../components/common/TermsDialog'
 import { isDemoMode } from '../services/api'
-import {
-  signInWithEmail,
-  signUpWithEmail,
-  supabase,
-} from '../services/auth'
+import { signInWithEmail, signUpWithEmail, supabase } from '../services/auth'
 import { emailAuthErrorMessage, validateEmailAuth } from '../utils/authForm'
 import type { AuthFieldErrors, EmailAuthFields, EmailAuthMode } from '../utils/authForm'
 import { isV2Preview } from '../v2/mode'
