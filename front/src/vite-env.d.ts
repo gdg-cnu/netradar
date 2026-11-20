@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_API_MODE?: 'demo' | 'live'
   readonly VITE_DEMO_VERSION?: 'v1' | 'v2'
+  readonly VITE_V2_DATA_SOURCE?: 'local' | 'api'
   readonly VITE_API_BASE_URL?: string
   readonly VITE_PLACE_SEARCH_SOURCE?: 'sample' | 'unknown'
   readonly VITE_ROUTE_ESTIMATE_SOURCE?: 'sample' | 'unknown'

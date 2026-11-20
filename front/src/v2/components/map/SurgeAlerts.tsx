@@ -1,45 +1,61 @@
 import { navigateTo } from '../../../utils/navigation'
 import { formatKstTime } from '../../services/demand'
 import type { DemandAlert, DemandPlace } from '../../types/demand'
+import { useFreshness } from '../../../hooks/useFreshness'
+import DemandDataMetadata, { type DemandMetadata } from './DemandDataMetadata'
 
 export default function SurgeAlerts({
   alerts,
   places,
   onSelect,
   originLabel,
+  metadata,
+  routeDisabled = false,
 }: {
   alerts: DemandAlert[]
   places: DemandPlace[]
   onSelect: (id: string) => void
   originLabel: string
+  metadata?: DemandMetadata
+  routeDisabled?: boolean
 }) {
+  const freshness = useFreshness(metadata?.generatedAt)
   return (
-    <section className="v2-alert-section" aria-labelledby="v2-alert-heading">
+    <section
+      className="v2-alert-section"
+      aria-labelledby="v2-alert-heading"
+      data-api-section={metadata ? 'alerts' : undefined}
+      data-freshness={metadata ? freshness : undefined}
+    >
       <div className="v2-demand-section-heading">
         <div>
           <span className="v2-demand-eyebrow">SURGE WATCH</span>
           <h2 id="v2-alert-heading">지금 주목할 급증 알림</h2>
         </div>
-        <span className="v2-demand-chip">시연용 알림</span>
+        {!metadata && <span className="v2-demand-chip">시연용 알림</span>}
       </div>
+      {metadata && <DemandDataMetadata metadata={metadata} freshness={freshness} />}
       <p className="v2-demand-caption">
-        {originLabel} 출발 · 예측 생성 시각 기준, 직선거리로 근사한 이동 시간입니다. 실제
-        도로·교통·배차 상황을 반영하지 않습니다.
+        {originLabel} 출발 ·{' '}
+        {metadata
+          ? '서버가 제공한 출발·도착 시각과 이동 시간입니다. 실제 도로 길 안내는 제공하지 않습니다.'
+          : '예측 생성 시각 기준, 직선거리로 근사한 이동 시간입니다. 실제 도로·교통·배차 상황을 반영하지 않습니다.'}
       </p>
       {alerts.length ? (
         <div className="v2-alert-grid">
           {alerts.map((alert, index) => {
             const place = places.find((item) => item.id === alert.placeId)
-            if (!place) return null
+            if (!place && !metadata) return null
+            const placeName = place?.name ?? `장소 정보 없음 (${alert.placeId})`
             return (
               <article className="v2-alert-card" key={alert.id}>
                 <div className="v2-alert-title">
                   <span className="v2-alert-number">0{index + 1}</span>
                   <button
-                    onClick={() => onSelect(place.id)}
-                    aria-label={`알림 장소 보기: ${place.name}`}
+                    onClick={() => onSelect(alert.placeId)}
+                    aria-label={`알림 장소 보기: ${placeName}`}
                   >
-                    <h3>{place.name}</h3>
+                    <h3>{placeName}</h3>
                     <span aria-hidden="true">↗</span>
                   </button>
                 </div>
@@ -65,13 +81,17 @@ export default function SurgeAlerts({
                 </div>
                 <button
                   className="v2-demand-primary"
-                  aria-label={`바로 출발: ${place.name}`}
+                  aria-label={`바로 출발: ${placeName}`}
+                  disabled={routeDisabled}
                   onClick={() =>
-                    navigateTo('route', { targetPlaceId: place.id, quick: '1' })
+                    navigateTo('route', { targetPlaceId: alert.placeId, quick: '1' })
                   }
                 >
                   바로 출발 <span aria-hidden="true">→</span>
                 </button>
+                {routeDisabled && (
+                  <p className="v2-demand-caption">서버 동선 연동 준비 중</p>
+                )}
               </article>
             )
           })}

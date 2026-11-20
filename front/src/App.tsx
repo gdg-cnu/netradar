@@ -4,7 +4,7 @@ import { useAppSession } from './hooks/useAppSession'
 import { useRoute } from './hooks/useRoute'
 import LoginPage from './pages/LoginPage'
 import { isDemoMode } from './services/api'
-import { isV2Preview } from './v2/mode'
+import { isV2Preview, isV2ServerData } from './v2/mode'
 import './styles/app.css'
 
 const MapPage = lazy(() => import('./pages/MapPage'))
@@ -50,7 +50,9 @@ export default function App() {
       {isDemoMode() && (
         <div className="demo-banner">
           {v2
-            ? '수요 급증 예보 · 목업 화면 테스트 · 실제 예보·관측 데이터가 아닙니다.'
+            ? isV2ServerData()
+              ? '서버 수요 지도 확인 모드 · 동선·운행·리플레이는 로컬 목업입니다.'
+              : '수요 급증 예보 · 목업 화면 테스트 · 실제 예보·관측 데이터가 아닙니다.'
             : '데모 모드 · 예시 예측과 운행 데이터입니다.'}
         </div>
       )}

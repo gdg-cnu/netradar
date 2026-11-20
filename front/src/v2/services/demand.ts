@@ -4,17 +4,20 @@ import type {
   DemandAlert,
   DemandOffset,
   DemandPlace,
+  DemandPlaceType,
   DemandPoint,
   DemandRange,
   DemandSnapshot,
   EventType,
 } from '../types/demand'
 
-export const eventTypeLabels: Record<EventType, string> = {
+export const eventTypeLabels: Record<DemandPlaceType, string> = {
   airport: '공항',
   concert: '공연',
   train: '열차',
   last_train: '막차',
+  seoul_rtd: '서울 인구 관측 지역',
+  venue: '공연장',
 }
 export const MOCK_ORIGIN = { name: '강남역', lat: 37.4979, lng: 127.0276 }
 const MINUTE = 60_000
@@ -39,8 +42,10 @@ export function kstDateKey(value: number | string | Date = Date.now()): string {
 export function formatKstTime(value: number | string | Date): string {
   return timeFormatter.format(new Date(value))
 }
-export function rangeColor(range: DemandRange): string {
-  return { low: '#fbd4b8', moderate: '#f39b58', high: '#e64b15' }[range]
+export function rangeColor(range: DemandRange | null): string {
+  return range === null
+    ? '#6b7280'
+    : { low: '#fbd4b8', moderate: '#f39b58', high: '#e64b15' }[range]
 }
 export function demandPoint(place: DemandPlace, offset: DemandOffset): DemandPoint {
   const point = place.points.find((item) => item.offset === offset)
@@ -225,7 +230,7 @@ export function createDemandSnapshot(now = Date.now()): DemandSnapshot {
       return {
         id: `${day}-${place.id}`,
         placeId: place.id,
-        type: place.type,
+        type: place.type as EventType,
         title: place.reasons[0],
         peakAt: new Date(peak).toISOString(),
         endsAt: new Date(

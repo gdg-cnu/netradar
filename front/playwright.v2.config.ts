@@ -35,6 +35,7 @@ export default defineConfig({
     env: {
       VITE_API_MODE: 'demo',
       VITE_DEMO_VERSION: 'v2',
+      VITE_V2_DATA_SOURCE: 'local',
       VITE_SUPABASE_URL: '',
       VITE_SUPABASE_ANON_KEY: '',
     },

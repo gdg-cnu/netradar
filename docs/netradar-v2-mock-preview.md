@@ -3,6 +3,8 @@
 2026-11-18 사용자가 전달한 팀 요청: 백엔드 API 수정은 백엔드 담당자가 진행하고, 프런트 화면 테스트는 먼저 목업 데이터로 진행한다.
 기준은 `netradar-v2-frontend-changes.md` 및 사용자가 제공한 v2 개요·파트별 계획·유저플로우다.
 
+이 문서는 `VITE_V2_DATA_SOURCE=local`의 기존 로컬 목업 범위를 설명한다. 서버의 장소 5곳·공항/공연/막차 이벤트를 읽는 새 모드는 [서버 수요 지도 확인](netradar-v2-server-preview.md)을 참고한다. 로컬 모의 운행 데이터의 장소 ID와 기록은 임의로 이전하지 않는다.
+
 ## 실행과 확인
 
 `front/`에서 `npm ci` 후 `.env.example`을 `.env.local`로 복사하고 `npm run dev`를 실행한다.

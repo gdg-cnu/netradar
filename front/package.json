@@ -15,6 +15,7 @@
     "test:e2e": "playwright test",
     "test:e2e:live": "playwright test --config playwright.live.config.ts",
     "test:e2e:v2": "playwright test --config playwright.v2.config.ts",
+    "test:e2e:v2:server": "playwright test --config playwright.server-v2.config.ts",
     "preview": "vite preview",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
