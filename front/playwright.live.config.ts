@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 // Exercise the real HTTP/auth client branch with isolated, intercepted test services.
-// This suite does not authenticate against Kakao or write to a real Supabase project.
+// This suite does not authenticate against a real auth provider or write to a real Supabase project.
 export default defineConfig({
   testDir: './tests/live',
   outputDir: './.cache/test-results-live',
