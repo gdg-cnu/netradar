@@ -2,20 +2,42 @@ import { isDemoMode } from '../../services/api'
 import type {
   Bounds,
   DemandAlert,
+  DemandEvent,
   DemandOffset,
   DemandPlace,
+  DemandPlaceType,
   DemandPoint,
   DemandRange,
   DemandSnapshot,
   EventType,
 } from '../types/demand'
 
-export const eventTypeLabels: Record<EventType, string> = {
+export const eventTypeLabels: Record<DemandPlaceType, string> = {
   airport: '공항',
   concert: '공연',
   train: '열차',
   last_train: '막차',
+  seoul_rtd: '서울 인구 관측 지역',
+  venue: '공연장',
 }
+export function formatEventSize(event: DemandEvent) {
+  if (
+    event.expectedExits === null &&
+    event.type !== 'airport' &&
+    event.type !== 'concert'
+  )
+    return '유출 인원 데이터 없음'
+  const label =
+    event.type === 'airport'
+      ? '입국 인원'
+      : event.type === 'concert'
+        ? '공연 규모 추정'
+        : '예상 유출'
+  return event.expectedExits === null
+    ? `${label} 데이터 없음`
+    : `${label} ${event.expectedExits.toLocaleString('ko-KR')}명`
+}
+
 export const MOCK_ORIGIN = { name: '강남역', lat: 37.4979, lng: 127.0276 }
 const MINUTE = 60_000
 const kstFormatter = new Intl.DateTimeFormat('en-CA', {
@@ -39,8 +61,10 @@ export function kstDateKey(value: number | string | Date = Date.now()): string {
 export function formatKstTime(value: number | string | Date): string {
   return timeFormatter.format(new Date(value))
 }
-export function rangeColor(range: DemandRange): string {
-  return { low: '#fbd4b8', moderate: '#f39b58', high: '#e64b15' }[range]
+export function rangeColor(range: DemandRange | null): string {
+  return range === null
+    ? '#6b7280'
+    : { low: '#fbd4b8', moderate: '#f39b58', high: '#e64b15' }[range]
 }
 export function demandPoint(place: DemandPlace, offset: DemandOffset): DemandPoint {
   const point = place.points.find((item) => item.offset === offset)
@@ -54,7 +78,7 @@ function mockRange(value: number): DemandRange {
 function makePlace(
   id: string,
   name: string,
-  type: EventType,
+  type: DemandPlaceType,
   lat: number,
   lng: number,
   indices: [number, number, number],
@@ -85,7 +109,9 @@ function makePlace(
     })),
     reasons: [
       reason,
-      '이벤트 이탈 규모와 시간대 가정을 반영한 화면 테스트용 수요 지수입니다.',
+      type === 'seoul_rtd'
+        ? '주변 인구와 시간대 가정을 반영한 화면 테스트용 수요 지수입니다.'
+        : '이벤트 이탈 규모와 시간대 가정을 반영한 화면 테스트용 수요 지수입니다.',
     ],
     taxiStands: [
       {
@@ -163,12 +189,12 @@ export function createDemandSnapshot(now = Date.now()): DemandSnapshot {
     makePlace(
       'gimpo',
       '김포공항',
-      'airport',
+      'seoul_rtd',
       37.558,
       126.802,
       [43, 76, 59],
       [1800, 3200, 2200],
-      '국내선 도착편 승객 이동 집중 (예시)',
+      '김포공항 주변 체류 인구와 시간대별 이동 가정 (예시)',
     ),
     makePlace(
       'olympic-hall',
@@ -183,12 +209,12 @@ export function createDemandSnapshot(now = Date.now()): DemandSnapshot {
     makePlace(
       'seoul-station',
       '서울역',
-      'train',
+      'seoul_rtd',
       37.5547,
       126.9706,
       [81, 68, 52],
       [4300, 3600, 2700],
-      '열차 도착 3편 · 하차 인원 900명 예상 (예시)',
+      '서울역 주변 체류 인구와 시간대별 이동 가정 (예시)',
     ),
     makePlace(
       'hongdae',
@@ -212,26 +238,54 @@ export function createDemandSnapshot(now = Date.now()): DemandSnapshot {
     ),
   ]
   const day = kstDateKey(now)
+  // Place membership does not imply an event. Gimpo and Seoul Station remain
+  // population examples with stable IDs, but their flight/train events are out of scope.
+  const eventExamples: {
+    placeId: string
+    type: EventType
+    peak: number
+    expectedExits: number
+  }[] = [
+    {
+      placeId: 'incheon-t1',
+      type: 'airport',
+      peak: now + 45 * MINUTE,
+      expectedExits: 1800,
+    },
+    {
+      placeId: 'olympic-hall',
+      type: 'concert',
+      peak: now + 60 * MINUTE,
+      expectedExits: 2400,
+    },
+    {
+      placeId: 'hongdae',
+      type: 'last_train',
+      peak: Date.parse(`${day}T23:35:00+09:00`),
+      expectedExits: 1200,
+    },
+    {
+      placeId: 'gangnam',
+      type: 'last_train',
+      peak: Date.parse(`${day}T23:45:00+09:00`),
+      expectedExits: 1600,
+    },
+  ]
   const snapshot: DemandSnapshot = {
     source: 'mock',
     generatedAt: new Date(now).toISOString(),
     places,
     alerts: [],
-    events: places.map((place, index) => {
-      const peak =
-        place.type === 'last_train'
-          ? Date.parse(`${day}T23:${index === 4 ? '35' : '45'}:00+09:00`)
-          : now + [45, 30, 60, 15][index] * MINUTE
+    events: eventExamples.map((event) => {
+      const place = places.find((item) => item.id === event.placeId)!
       return {
         id: `${day}-${place.id}`,
         placeId: place.id,
-        type: place.type,
+        type: event.type,
         title: place.reasons[0],
-        peakAt: new Date(peak).toISOString(),
-        endsAt: new Date(
-          peak + (place.type === 'train' ? 20 : 30) * MINUTE,
-        ).toISOString(),
-        expectedExits: [1800, 900, 2400, 900, 1200, 1600][index],
+        peakAt: new Date(event.peak).toISOString(),
+        endsAt: new Date(event.peak + 30 * MINUTE).toISOString(),
+        expectedExits: event.expectedExits,
         source: '화면 테스트용 목업 · 실제 수집 데이터 아님',
       }
     }),

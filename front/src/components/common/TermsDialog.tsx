@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { isV2Preview } from '../../v2/mode'
+import { isV2Preview, isV2ServerData } from '../../v2/mode'
 
 export default function TermsDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -27,7 +27,9 @@ export default function TermsDialog({ onClose }: { onClose: () => void }) {
       <h3>데모 데이터</h3>
       <p>
         {isV2Preview()
-          ? '수요 지수·인구·이벤트·장소 범위·이동 시간·리플레이 관측값은 화면 테스트용 예시입니다. 실제 예보, 택시 승차 건수나 기사 수입을 나타내지 않습니다. 서울 도시데이터·공항·공연·열차 데이터 연계는 준비 중이며 현재 해당 자료를 실시간으로 수집해 표시하는 것은 아닙니다.'
+          ? isV2ServerData()
+            ? '수요 지도·장소 상세·이벤트·알림은 연결된 서버의 응답을 사용하며 각 영역에 출처와 생성 시각을 표시합니다. 서버 예시 데이터는 실제 관측이나 검증된 예보가 아닙니다. 동선·운행·리플레이는 별도의 로컬 목업이고 실제 길 안내·기사 수입을 예측하지 않습니다.'
+            : '수요 지수·인구·이벤트·장소 범위·이동 시간·리플레이 관측값은 화면 테스트용 예시입니다. 실제 예보, 택시 승차 건수나 기사 수입을 나타내지 않습니다. 서울 도시데이터·공항·공연·열차 데이터 연계는 준비 중이며 현재 해당 자료를 실시간으로 수집해 표시하는 것은 아닙니다.'
           : '데모의 시급·승객 수·경로·수익은 예시 값입니다. 실제 수익이나 실시간 교통 정보를 보장하지 않습니다.'}
       </p>
       <h3>이 기기에 저장되는 정보</h3>

@@ -28,6 +28,9 @@ export default function DemandMap({
   position,
   focusRequest,
   resetToken,
+  viewportPlaces,
+  focusPlaces,
+  sourceLabel = '목업',
 }: {
   places: DemandPlace[]
   metric: DemandMetric
@@ -39,6 +42,9 @@ export default function DemandMap({
   position: { lat: number; lng: number } | null
   focusRequest: { id: string; token: number } | null
   resetToken: number
+  viewportPlaces?: DemandPlace[]
+  focusPlaces?: DemandPlace[]
+  sourceLabel?: string
 }) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
@@ -48,6 +54,13 @@ export default function DemandMap({
   const latestFreshness = useRef(freshness)
   const callbacks = useRef({ onSelect, onBoundsChange })
   const [tileState, setTileState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const fitted = useRef<{ ready: boolean; resetToken: number }>({
+    ready: false,
+    resetToken,
+  })
+  const focusedRequest = useRef<{ id: string; token: number } | null>(null)
+  const fitPlaces = viewportPlaces ?? places
+  const targetPlaces = focusPlaces ?? fitPlaces
 
   useEffect(() => {
     callbacks.current = { onSelect, onBoundsChange }
@@ -104,6 +117,8 @@ export default function DemandMap({
       group.current = null
       layers.current = []
       location.current = null
+      fitted.current.ready = false
+      focusedRequest.current = null
     }
   }, [])
 
@@ -121,7 +136,7 @@ export default function DemandMap({
         place.polygon.map(([lng, lat]) => [lat, lng] as L.LatLngTuple),
       ).addTo(group.current!)
       const tooltip = document.createElement('span')
-      tooltip.textContent = `${place.name} · ${metric === 'surge' ? `수요 지수 ${point.surgeIndex}` : `예상 인구 ${point.population.toLocaleString('ko-KR')}명`} · 목업`
+      tooltip.textContent = `${place.name} · ${metric === 'surge' ? `수요 지수 ${point.surgeIndex}` : point.population === null ? '인구 데이터 없음' : `예상 인구 ${point.population.toLocaleString('ko-KR')}명`} · ${sourceLabel}`
       polygon.bindTooltip(tooltip)
       polygon.on('click', () => callbacks.current.onSelect(place.id))
       return {
@@ -131,20 +146,35 @@ export default function DemandMap({
       }
     })
     updateColors(layers.current, latestFreshness.current)
-  }, [places, metric, offset, selectedId])
+  }, [places, metric, offset, selectedId, sourceLabel])
 
   useEffect(() => {
-    if (places.length)
+    if (
+      fitPlaces.length &&
+      (!fitted.current.ready || fitted.current.resetToken !== resetToken)
+    ) {
+      fitted.current = { ready: true, resetToken }
       map.current?.fitBounds(
-        L.latLngBounds(places.map((place) => [place.lat, place.lng] as L.LatLngTuple)),
-        { padding: [35, 45], maxZoom: 12 },
+        L.latLngBounds(fitPlaces.map((place) => [place.lat, place.lng] as L.LatLngTuple)),
+        // A following place selection must not race an in-flight fit animation.
+        { padding: [35, 45], maxZoom: 12, animate: false },
       )
-  }, [places, resetToken])
+    }
+  }, [fitPlaces, resetToken])
 
   useEffect(() => {
-    const place = places.find((item) => item.id === focusRequest?.id)
-    if (place) map.current?.setView([place.lat, place.lng], 14, { animate: false })
-  }, [focusRequest, places])
+    if (!focusRequest) {
+      focusedRequest.current = null
+      return
+    }
+    // Request identity also distinguishes a new selection after a batched reset.
+    if (focusedRequest.current === focusRequest) return
+    const place = targetPlaces.find((item) => item.id === focusRequest.id)
+    if (place) {
+      focusedRequest.current = focusRequest
+      map.current?.setView([place.lat, place.lng], 14, { animate: false })
+    }
+  }, [focusRequest, targetPlaces])
 
   useEffect(() => {
     if (!map.current) return
@@ -185,7 +215,9 @@ export default function DemandMap({
         </div>
       )}
       <div className="v2-demand-map-legend" aria-label="예측 범례">
-        <strong>{metric === 'surge' ? '수요 지수' : '예상 인구'} · 목업</strong>
+        <strong>
+          {metric === 'surge' ? '수요 지수' : '예상 인구'} · {sourceLabel}
+        </strong>
         {freshness === 'fresh' ? (
           <div>
             {(['low', 'moderate', 'high'] as const).map((range, index) => (
@@ -194,6 +226,12 @@ export default function DemandMap({
                 {['낮음', '보통', '높음'][index]}
               </span>
             ))}
+            {metric === 'population' && (
+              <span>
+                <i style={{ background: '#6b7280' }} />
+                데이터 없음
+              </span>
+            )}
           </div>
         ) : (
           <p>
