@@ -1,7 +1,29 @@
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import demand, forecast, profile, places, routes, trips
+
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+]
+
+
+def get_allowed_origins() -> list[str]:
+    """ALLOWED_ORIGINS(쉼표 구분)가 있으면 그 값만, 없으면 로컬 개발 주소를 허용한다."""
+    raw = os.getenv("ALLOWED_ORIGINS", "")
+    origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+    return origins or DEFAULT_ALLOWED_ORIGINS
 
 
 app = FastAPI(
@@ -13,12 +35,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-    ],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[

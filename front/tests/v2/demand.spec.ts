@@ -75,21 +75,46 @@ test('demand metrics, time, search, event types and alert selection work without
     details.getByRole('heading', { name: '김포공항', exact: true }),
   ).toBeVisible()
   await expect(details).toContainText('승차대')
+  await expect(details).toContainText('서울 인구 관측 지역')
+  await expect(details).toContainText('주변 체류 인구')
+  await expect(details.locator('.v2-place-events li')).toHaveCount(0)
+  await expect(details).not.toContainText('국내선 도착편')
+  await page.getByRole('searchbox', { name: '장소 검색', exact: true }).fill('서울역')
+  await list.getByRole('button', { name: /서울역/ }).click()
+  await expect(
+    details.getByRole('heading', { name: '서울역', exact: true }),
+  ).toBeVisible()
+  await expect(details).toContainText('서울 인구 관측 지역')
+  await expect(details.locator('.v2-place-events li')).toHaveCount(0)
+  await expect(details).not.toContainText('열차 도착')
+  await expect(
+    page
+      .getByRole('group', { name: '이벤트 유형', exact: true })
+      .getByRole('button', { name: '열차', exact: true }),
+  ).toHaveCount(0)
+  await expect(page.locator('.v2-alert-title')).not.toContainText('김포공항')
+  await expect(page.locator('.v2-alert-title')).not.toContainText('서울역')
   await page
     .getByRole('group', { name: '이벤트 유형', exact: true })
     .getByRole('button', { name: '공항', exact: true })
     .click()
-  await expect(page.locator('.v2-event-list li')).toHaveCount(2)
-  await expect(page.locator('.v2-event-kind')).toHaveText(['공항', '공항'])
+  await expect(page.locator('.v2-event-list li')).toHaveCount(1)
+  await expect(page.locator('.v2-event-kind')).toHaveText(['공항'])
+  await expect(page.locator('.v2-event-list')).toContainText('인천공항 T1')
+  await expect(page.locator('.v2-event-list')).toContainText('입국 인원 1,800명')
   await page
     .getByRole('group', { name: '이벤트 유형', exact: true })
     .getByRole('button', { name: '공연', exact: true })
     .click()
   await expect(page.locator('.v2-event-list li')).toHaveCount(1)
+  await expect(page.locator('.v2-event-list')).toContainText('공연 규모 추정 2,400명')
   await page.getByRole('button', { name: /^이벤트 장소 보기:/ }).click()
   await expect(
     details.getByRole('heading', { name: '올림픽공원 공연장', exact: true }),
   ).toBeVisible()
+  await expect(details.locator('.v2-place-events')).toContainText(
+    '공연 규모 추정 2,400명',
+  )
   const alert = page.getByRole('button', { name: /^알림 장소 보기:/ }).first()
   const alertName = (await alert.getAttribute('aria-label'))!.replace(
     '알림 장소 보기: ',

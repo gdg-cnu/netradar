@@ -15,6 +15,8 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:5177',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
+    // Keep the API relay and injected failures observable through page.route.
+    serviceWorkers: 'block',
     launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH },
   },
   projects: [

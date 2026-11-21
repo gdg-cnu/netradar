@@ -38,7 +38,7 @@ export default function SurgeAlerts({
       <p className="v2-demand-caption">
         {originLabel} 출발 ·{' '}
         {metadata
-          ? '서버가 제공한 출발·도착 시각과 이동 시간입니다. 실제 도로 길 안내는 제공하지 않습니다.'
+          ? '서버가 제공한 출발·도착 시각과 이동 시간입니다. 실시간 교통 상황과 실제 도로 길 안내는 제공하지 않습니다.'
           : '예측 생성 시각 기준, 직선거리로 근사한 이동 시간입니다. 실제 도로·교통·배차 상황을 반영하지 않습니다.'}
       </p>
       {alerts.length ? (

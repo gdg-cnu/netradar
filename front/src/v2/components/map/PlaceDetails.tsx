@@ -1,7 +1,12 @@
 import { useId } from 'react'
 import { navigateTo } from '../../../utils/navigation'
 import { useFreshness } from '../../../hooks/useFreshness'
-import { demandPoint, eventTypeLabels, formatKstTime } from '../../services/demand'
+import {
+  demandPoint,
+  eventTypeLabels,
+  formatEventSize,
+  formatKstTime,
+} from '../../services/demand'
 import type {
   DemandEvent,
   DemandMetric,
@@ -98,10 +103,7 @@ export default function PlaceDetails({
                 </span>
                 <strong>{event.title}</strong>
                 <small>
-                  {event.expectedExits === null
-                    ? '유출 인원 데이터 없음'
-                    : `예상 유출 ${event.expectedExits.toLocaleString('ko-KR')}명`}{' '}
-                  · {event.source}
+                  {formatEventSize(event)}· {event.source}
                   {metadata ? '' : ' (목업)'}
                 </small>
               </li>

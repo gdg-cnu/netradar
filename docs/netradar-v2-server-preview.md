@@ -37,10 +37,12 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 
 `/routes/recommend`, v2 운행 이벤트·저장, 사용자 설정 분리, `/replay/*`는 서버 구현과 계약 확정이 남았다. 서버 장소의 동선 추천·바로 출발은 준비 중으로 표시한다. 별도 동선·운행·리플레이 탭은 기존 로컬 목업을 유지하며 서버 장소·서버 기록이라고 표시하지 않는다. 기존 v1·v2 저장 데이터는 변환하거나 삭제하지 않는다.
 
+실제 막차 수집 전에는 이벤트의 "오늘"이 달력일인지 운행일인지도 함께 확정해야 한다. 현재 조회는 한국 시간 자정까지이며, 새 매핑 문서의 24시 이후 막차를 포함하려면 상세·알림 API와 같은 기간 규칙으로 조정해야 한다. 프런트만 임의로 조회 기간을 늘리지 않는다.
+
 로그인은 최신 팀 변경의 이메일·비밀번호 방식을 유지한다. 실제 인증 메일·운영 DB·외부 데이터 수집과 예측 검증은 별도다.
 
 ## 검증
 
-`front/`에서 `npm run typecheck`, `npm test`, `npm run build`, `npm run format:check`, `npm run test:e2e:v2:server`를 실행한다. 기존 `test:e2e`, `test:e2e:live`, `test:e2e:v2`도 회귀 검증한다. 서버 E2E에는 백엔드 의존성이 설치된 Python이 필요하며 `NETRADAR_TEST_PYTHON`으로 해당 가상환경의 Python 실행 파일을 지정할 수 있다. 상세 테스트 구성은 `front/tests/server-v2/README.md`를 참고한다. 서버 테스트 설정은 외부 서비스 키 없이 공개 조회 경로만 검증하며 실제 계정 생성이나 운영 DB 쓰기를 하지 않는다.
+`front/`에서 `npm run typecheck`, `npm test`, `npm run build`, `npm run format:check`, `npm run test:e2e:v2:server`를 실행한다. 기존 `test:e2e`, `test:e2e:live`, `test:e2e:v2`도 회귀 검증한다. 서버 E2E에는 백엔드 의존성이 설치된 Python이 필요하며 `NETRADAR_TEST_PYTHON`으로 해당 가상환경의 Python 실행 파일을 지정할 수 있다. 서버 조회 테스트는 GitHub Actions의 `E2E (server-v2)`에서도 실행한다. PWA 서비스 워커는 API 가로채기 테스트에서 차단하고, 등록·오프라인 앱 실행은 별도의 v2 PWA 테스트로 검증한다. 상세 테스트 구성은 `front/tests/server-v2/README.md`를 참고한다. 서버 테스트 설정은 외부 서비스 키 없이 공개 조회 경로만 검증하며 실제 계정 생성이나 운영 DB 쓰기를 하지 않는다.
 
 기존 WBS는 구주제 항목이므로 이번 서버 조회 연동을 근거로 v2 전체 완료율을 올리지 않는다.

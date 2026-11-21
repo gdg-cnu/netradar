@@ -1,9 +1,9 @@
-import { eventTypeLabels, formatKstTime } from '../../services/demand'
+import { eventTypeLabels, formatEventSize, formatKstTime } from '../../services/demand'
 import type { DemandEvent, DemandPlace, EventType } from '../../types/demand'
 import { useFreshness } from '../../../hooks/useFreshness'
 import DemandDataMetadata, { type DemandMetadata } from './DemandDataMetadata'
 
-const types: (EventType | 'all')[] = ['all', 'airport', 'concert', 'train', 'last_train']
+const types: (EventType | 'all')[] = ['all', 'airport', 'concert', 'last_train']
 
 export default function EventTimeline({
   events,
@@ -29,8 +29,6 @@ export default function EventTimeline({
   onRetry?: () => void
 }) {
   const freshness = useFreshness(metadata?.generatedAt)
-  const visibleTypes =
-    server || metadata ? types.filter((item) => item !== 'train') : types
   return (
     <section
       className="v2-event-section"
@@ -52,7 +50,7 @@ export default function EventTimeline({
         role="group"
         aria-label="이벤트 유형"
       >
-        {visibleTypes.map((item) => (
+        {types.map((item) => (
           <button
             key={item}
             aria-pressed={type === item}
@@ -64,8 +62,8 @@ export default function EventTimeline({
       </div>
       <p className="v2-demand-caption">
         {server || metadata
-          ? '서버가 제공한 오늘 남은 이벤트입니다. 출처와 유출 인원 제공 여부를 확인해 주세요.'
-          : '이벤트 종료 전까지 표시합니다. 일정과 유출 인원은 화면 확인용 예시입니다.'}
+          ? '서버가 제공한 오늘 남은 이벤트입니다. 인원은 입국 인원·공연 규모 등 이벤트 기준이며 택시 탑승 인원이 아닙니다.'
+          : '이벤트 종료 전까지 표시합니다. 일정과 입국 인원·공연 규모는 화면 확인용 예시입니다.'}
       </p>
       {loading ? (
         <p className="v2-demand-empty" role="status">
@@ -94,10 +92,7 @@ export default function EventTimeline({
                 <span>
                   {places.find((place) => place.id === event.placeId)?.name ??
                     '장소 정보 없음'}{' '}
-                  ·{' '}
-                  {event.expectedExits === null
-                    ? '유출 인원 데이터 없음'
-                    : `예상 유출 ${event.expectedExits.toLocaleString('ko-KR')}명`}
+                  · {formatEventSize(event)}
                 </span>
                 <small>
                   {event.source}

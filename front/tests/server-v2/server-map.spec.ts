@@ -300,7 +300,9 @@ test('a 12-second request timeout remains an API error without a successful demo
     release = resolve
   })
   await relayBackend(page, async (route, url) => {
-    if (!url.pathname.endsWith('/heatmap')) return false
+    if (!url.pathname.endsWith('/heatmap') || url.searchParams.get('offset') !== '60')
+      return false
+    expect(url.searchParams.has('bbox')).toBeFalsy()
     heldRequests += 1
     await held
     await route.abort().catch(() => undefined)
@@ -308,16 +310,30 @@ test('a 12-second request timeout remains an API error without a successful demo
   })
   try {
     await loginPreview(page, true)
-    await expect.poll(() => heldRequests).toBeGreaterThan(0)
-    const beforeScopeChange = heldRequests
-    await page
-      .getByRole('checkbox', { name: '지도 안의 장소만 보기', exact: true })
-      .uncheck()
-    await expect.poll(() => heldRequests).toBeGreaterThan(beforeScopeChange)
-    await page.clock.fastForward(12_100)
+    // Finish the initial requests and remove bbox-driven cancellations before
+    // timing one distinct request. Unchecking an undefined bbox need not refetch.
+    await allPlaces(page)
+    await expect(
+      page.getByRole('checkbox', { name: '지도 안의 장소만 보기', exact: true }),
+    ).not.toBeChecked()
+    await page.clock.pauseAt(new Date(NOW.getTime() + 60_000))
+    await choose(page, '예측 시점', '+60분')
+    await expect.poll(() => heldRequests).toBe(1)
+    await expect(places(page)).toHaveAttribute('aria-busy', 'true')
+    await expect(places(page).locator('li')).toHaveCount(0)
+    await page.clock.runFor(11_999)
+    await expect(
+      page.getByRole('button', { name: '지도 다시 시도', exact: true }),
+    ).not.toBeVisible()
+    await expect(places(page)).toHaveAttribute('aria-busy', 'true')
+    await page.clock.runFor(1)
     await expect(
       page.getByRole('button', { name: '지도 다시 시도', exact: true }),
     ).toBeVisible()
+    await expect(section(page, 'heatmap')).toContainText(
+      '서버 응답 시간이 초과되었습니다. 다시 시도해 주세요.',
+    )
+    await expect(places(page)).toHaveAttribute('aria-busy', 'false')
     await expect(places(page).locator('li')).toHaveCount(0)
     await expect(page.locator('.v2-demand-place-list')).not.toContainText('서울역')
   } finally {

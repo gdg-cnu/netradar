@@ -50,13 +50,13 @@ test('event filters combine Korea date, remaining events, event type and map bou
   const original = structuredClone(snapshot)
   const events = filterDemandEvents(snapshot, {
     now: noon,
-    type: 'train',
-    bounds: { west: 126.9, south: 37.5, east: 127.1, north: 37.6 },
+    type: 'concert',
+    bounds: { west: 127.1, south: 37.5, east: 127.2, north: 37.6 },
   })
   assert.equal(events.length, 1)
-  assert.equal(events[0].placeId, 'seoul-station')
+  assert.equal(events[0].placeId, 'olympic-hall')
   assert.equal(
-    filterDemandEvents(snapshot, { now: noon + 36 * 60 * 1000, type: 'train' }).length,
+    filterDemandEvents(snapshot, { now: noon + 91 * 60 * 1000, type: 'concert' }).length,
     0,
   )
   assert.equal(
@@ -83,14 +83,65 @@ test('alerts use travel time from the selected origin, cap at three and exclude 
     assert.ok(Date.parse(alert.recommendedDepartureAt) >= noon)
     assert.ok(Date.parse(alert.peakStart) <= noon + 60 * 60_000)
   }
-  const station = snapshot.places.find((p) => p.id === 'seoul-station')!
-  const local = createDemandAlerts(snapshot, station).find(
-    (a) => a.placeId === station.id,
-  )!
+  const venue = snapshot.places.find((p) => p.id === 'olympic-hall')!
+  const local = createDemandAlerts(snapshot, venue).find((a) => a.placeId === venue.id)!
   assert.equal(local.travelMinutes, 5)
   assert.ok(snapshot.alerts.every((a) => a.surgeIndexAtArrival <= 100))
   const remoteAlerts = createDemandAlerts(snapshot, { lat: 37.4486, lng: 126.76 })
   assert.ok(remoteAlerts.every((alert) => alert.travelMinutes <= 60))
+})
+
+test('Gimpo and Seoul Station retain their population places but never generate flight/train events or alerts', () => {
+  for (const now of [noon, Date.parse('2026-11-18T23:15:00+09:00')]) {
+    const snapshot = createDemandSnapshot(now)
+    const expected = [
+      {
+        id: 'gimpo',
+        name: '김포공항',
+        lat: 37.558,
+        lng: 126.802,
+        population: [1800, 3200, 2200],
+      },
+      {
+        id: 'seoul-station',
+        name: '서울역',
+        lat: 37.5547,
+        lng: 126.9706,
+        population: [4300, 3600, 2700],
+      },
+    ]
+    assert.equal(snapshot.places.length, 6)
+    for (const original of expected) {
+      const place = snapshot.places.find((item) => item.id === original.id)!
+      assert.equal(place.name, original.name)
+      assert.equal(place.type, 'seoul_rtd')
+      assert.equal(place.lat, original.lat)
+      assert.equal(place.lng, original.lng)
+      assert.deepEqual(
+        place.points.map((point) => point.population),
+        original.population,
+      )
+      assert.ok(
+        place.reasons.every((reason) => !/국내선|항공편|열차|하차 인원/.test(reason)),
+      )
+      assert.ok(place.reasons.some((reason) => reason.includes('인구')))
+    }
+    assert.deepEqual(
+      snapshot.events.map((event) => event.placeId),
+      ['incheon-t1', 'olympic-hall', 'hongdae', 'gangnam'],
+    )
+    assert.deepEqual(
+      new Set(snapshot.events.map((event) => event.type)),
+      new Set(['airport', 'concert', 'last_train']),
+    )
+    for (const origin of snapshot.places) {
+      const alerts = createDemandAlerts(snapshot, origin)
+      assert.ok(
+        alerts.every((alert) => !['gimpo', 'seoul-station'].includes(alert.placeId)),
+      )
+      assert.ok(alerts.every((alert) => !/국내선|열차 도착/.test(alert.reason)))
+    }
+  }
 })
 
 test('mock reads honor cancellation before and during the pending load', async () => {

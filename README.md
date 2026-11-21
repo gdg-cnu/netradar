@@ -64,7 +64,7 @@ http://localhost:5173 에서 이용·저장 안내에 동의하고 **데모로 �
 cd backend
 python -m venv .venv
 # Windows: .venvScriptsactivate   /   macOS·Linux: source .venv/bin/activate
-pip install -r requirements.txt pytest
+pip install -r requirements-dev.txt   # 실행용 requirements.txt + 테스트용 pytest
 cp .env.example .env            # Windows PowerShell: Copy-Item .env.example .env
 ```
 
@@ -78,6 +78,7 @@ uvicorn main:app --reload --port 8000
 - http://localhost:8000/docs 에서 API 목록을 보고 직접 호출해 볼 수 있습니다.
 - `backend/.env` 값이 비어 있어도 서버는 켜집니다. v2 목업 API(`/api/v1/heatmap`, `/events`, `/alerts/top`, `/config`, `/places/{id}`)는 바로 동작합니다.
 - 로그인이 필요한 API(`/me/*`, `/trips*`)는 `SUPABASE_*` 값이, v1 동선 추천은 `KAKAO_MOBILITY_REST_API_KEY`가 필요합니다. 각 항목 설명은 `backend/.env.example`에 있습니다.
+- 배포할 때는 `ALLOWED_ORIGINS`에 프런트엔드 주소를 넣어야 브라우저 요청이 허용됩니다(쉼표로 여러 개). 비워 두면 로컬 개발 주소만 허용합니다.
 
 #### 3. 실제 로그인까지 확인하기
 
@@ -87,6 +88,8 @@ uvicorn main:app --reload --port 8000
 4. 이메일 인증 링크가 로컬 앱으로 돌아오도록 Supabase → Authentication → URL Configuration에 `http://localhost:5173`을 등록합니다.
 
 #### 테스트
+
+`main`·`dev` 브랜치에 push하거나 PR을 올리면 GitHub Actions(`.github/workflows/ci.yml`)가 아래 검사를 자동으로 실행합니다.
 
 ```sh
 # 백엔드 (backend/, 가상환경 켠 상태)
@@ -104,6 +107,15 @@ npm run test:e2e:v2:server        # v2 공개 서버 조회·오류·누락 표�
 ```
 
 브라우저 테스트의 인증 서버는 예약된 `.invalid` 도메인이며 실제 회원가입이나 메일 발송을 하지 않습니다.
+
+### PWA (홈 화면에 추가)
+
+`npm run build`로 만든 배포 버전은 PWA로 설치할 수 있습니다(`npm run dev`에서는 서비스 워커가 꺼져 있습니다). 로컬 확인은 `npm run build && npm run preview` 후 http://localhost:4173 에서 합니다.
+
+- 앱 화면(JS·CSS·이미지)만 미리 저장해서, 네트워크가 끊겨도 앱이 열립니다.
+- 예측·인증 API 응답은 저장하지 않습니다. 신선도 판정이 틀어지지 않게 하기 위해서입니다. OpenStreetMap 지도 타일도 이용 정책에 따라 오프라인 저장을 하지 않습니다.
+- 새 버전이 배포되면 화면 아래에 **새로고침** 안내가 뜹니다. 운행 중에 자동으로 새로고침하지 않습니다.
+- 설치하려면 HTTPS로 배포해야 합니다(localhost는 예외). 아이콘 원본은 `front/public/icons/*.svg`입니다.
 
 ### 기존 v1 WBS 구현 범위
 
