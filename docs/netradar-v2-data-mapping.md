@@ -4,6 +4,7 @@
 - 기준: 팀 수집 데이터 목록(파트 A·B), 현재 `backend/`·`front/` 코드, [`netradar-v2-backend-changes.md`](netradar-v2-backend-changes.md)(테이블·API 제안안), [`netradar-v2-mock-preview.md`](netradar-v2-mock-preview.md)
 - 목적: 지금 쓰는 목업이 어디에 있고, **어떤 수집 데이터와 로직으로 바꿔야 하는지** 한곳에 정리한다
 - 테이블 컬럼과 API 응답 필드의 자세한 내용은 백엔드 수정 사항 문서(4장, 7장)를 따른다. 이 문서는 "무엇을 무엇으로 바꾸는가"만 다룬다
+- 수정 (2026-11-23): 수집 데이터를 **Supabase**에 저장하고 자동 수집은 **GitHub Actions** 예약 작업으로 돌리기로 했다. 테이블·저장 함수는 [`supabase/schema.sql`](../supabase/schema.sql) 11~21장에 반영했다. 공연시설은 `places.kopis_facility_id` 대신 `venues` 표로, 역 → 장소 연결은 `station_places` 표로 바꿨다
 
 ---
 
@@ -34,6 +35,48 @@
 | 상시 수집기 | 실시간 도시데이터(10분) | 인천공항(1시간), KOPIS(1일) |
 | 검증 데이터 | 승차난 지점 | 택시 OD 상위 10개소 |
 
+### 수집 실행 환경: GitHub Actions → Supabase
+
+자동 수집은 GitHub Actions 예약 작업(`schedule`)이 Python 수집 스크립트를 실행하고, 스크립트가 Supabase에 저장한다. API 서버와 따로 돌아서 API 서버가 꺼져도 수집은 계속된다.
+
+| 구성 | 역할 | 위치 |
+|---|---|---|
+| GitHub Actions 워크플로 | 정해진 시각에 수집 스크립트 실행 (cron 시각은 UTC). 수동 실행용 `workflow_dispatch`도 둔다 | `.github/workflows/collect-*.yml` (작성 예정) |
+| 수집 스크립트 (Python) | 원본 API 호출 → 파싱 → 저장 함수(RPC) 호출. 백엔드와 같은 `supabase`·`httpx` 패키지를 쓴다 | `backend/collectors/` (작성 예정) |
+| 저장 함수 | 중복 방지·덮어쓰기 규칙·이벤트 생성을 DB 안에서 처리 | `supabase/schema.sql` 20장 |
+| `collector_runs` | 실행마다 시작·종료·상태·행 수·오류를 남긴다 | `supabase/schema.sql` 19장 |
+
+| 워크플로 | cron (UTC) | 한국 시간 | 저장 함수 |
+|---|---|---|---|
+| `collect-citydata` | `*/10 * * * *` | 10분마다 | `record_population(rows)` |
+| `collect-airport` | `5 * * * *` | 매시 5분 | `record_airport_arrivals(rows, ratio)` |
+| `collect-kopis` | `0 21 * * *` | 매일 06:00 | `upsert_kopis_venue(...)`, `replace_concert_events(mt20id, events)` |
+
+비밀값은 GitHub 저장소의 Actions secrets에 둔다. 저장소에 커밋하지 않는다.
+
+| Secret | 값 |
+|---|---|
+| `SUPABASE_URL` | Supabase 프로젝트 URL |
+| `SUPABASE_SECRET_KEY` | service role(secret) 키. 백엔드 `.env`와 같은 이름 |
+| `SEOUL_API_KEY` | 서울 열린데이터광장 인증키 (실시간 도시데이터, 막차) |
+| `DATA_GO_KR_KEY` | 공공데이터포털 인증키 (인천공항) |
+| `KOPIS_API_KEY` | KOPIS 인증키 |
+
+GitHub Actions 예약 작업의 제약과 대응:
+
+| 제약 | 영향 | 대응 |
+|---|---|---|
+| 예약 시각보다 **수 분~수십 분 늦게** 시작하거나, GitHub가 붐비면 **건너뛴다** | 10분 간격 인구 로그에 빈 시각이 생긴다 | `observed_at`은 실행 시각이 아니라 원본 `PPLTN_TIME`을 쓰므로 값이 틀어지지는 않는다. 실행 자체가 없었던 시각은 행이 없고, 리플레이·API는 행이 없는 시각을 `null`로 본다. 수집률은 `collector_runs`로 확인한다 |
+| 예약 작업은 **기본 브랜치(`main`)의 워크플로만** 돈다 | `dev`에만 올리면 수집이 시작되지 않는다 | 수집 워크플로는 먼저 `main`에 반영한다 |
+| 공개 저장소는 **60일 동안 커밋이 없으면** 예약 작업이 자동으로 꺼진다 | 수집이 조용히 멈춘다 | 꺼지면 Actions 화면에서 다시 켠다. `collector_runs`의 마지막 실행 시각을 주기적으로 확인한다 |
+| 비공개 저장소는 무료 사용량이 월 2,000분이고 **실행마다 1분 단위로 올림**된다 | 10분 수집만으로 하루 144회 × 1분 이상 ≈ 월 4,300분 이상이라 무료 사용량을 넘는다 | 저장소를 공개로 두거나(공개 저장소의 표준 러너는 무료), 비용을 감수한다 (결정 6) |
+| 같은 워크플로가 겹쳐 돌 수 있다 | 앞 실행이 늦게 끝나면 다음 실행과 겹친다 | 워크플로마다 `concurrency` 그룹을 두고 `cancel-in-progress: false`로 겹치지 않게 한다 |
+
+- 실시간 도시데이터는 1회 실행에 121곳을 호출한다. 동시에 10곳 정도씩 나눠 호출해서 1~2분 안에 끝낸다
+- ⚠️ GitHub 러너는 해외(Azure) IP다. 국내 공공 API가 해외 IP를 막는지 첫 수동 실행(`workflow_dispatch`)으로 먼저 확인한다
+- 1회 적재(121곳 영역, 막차 시각, 역 → 장소 연결표, 인천공항 영역)는 로컬 스크립트로 넣는다. 필요하면 수동 실행 워크플로로 만든다
+- 예보 생성(`predict()`)도 같은 방식(10분 워크플로)으로 돌릴 수 있지만, 예약 지연이 그대로 예보 지연이 된다. 프런트는 20분이 지나면 신선도를 회색으로 표시하므로 지연이 잦으면 다른 상시 환경을 검토한다 (결정 7)
+
 강수 등 기상 데이터는 수집하지 않는다(2026-11-20 결정). 날씨 보정은 하지 않는다.
 
 서울 실시간 도시데이터와 인천공항 승객예고는 **과거 데이터를 제공하지 않는다**. 수집을 시작한 날부터만 리플레이·검증 데이터가 쌓이므로 다른 작업보다 먼저 수집기를 띄운다.
@@ -58,6 +101,8 @@ KOPIS 공연 정보 ────────1일───→ 이벤트 수집기
 승차난 지점 · 택시 OD 상위 10개소 ──→ AI 검증 (서비스 API에는 쓰지 않음)
 ```
 
+"인구 수집기"와 "이벤트 수집기"는 GitHub Actions 예약 작업이 실행하는 Python 스크립트(`backend/collectors/`)이고, 결과를 Supabase 저장 함수로 넣는다. "1회 적재"는 로컬 스크립트다.
+
 ---
 
 ## 3. 목업 → 실데이터 매핑
@@ -66,8 +111,8 @@ KOPIS 공연 정보 ────────1일───→ 이벤트 수집기
 
 | 현재 목업 | 바꿀 데이터 | 처리 로직 | 저장 → API |
 |---|---|---|---|
-| `backend/data/mock_demand.py` 장소 5곳 (`id`, `name`, `type`, `lat`, `lng`) | **서울 실시간 도시데이터** 장소 목록(121곳) + 인천공항 + **KOPIS** 공연장 | 1회 적재하고 장소 목록이 바뀌면 갱신한다. 출처별 `type`: `seoul_rtd` / `airport` / `venue`. 공연장 좌표는 KOPIS 공연시설 정보에서 가져온다 | `places` → `/heatmap`, `/places/{id}` |
-| `_polygon()`: 중심 좌표 주변의 근사 6각형 | **서울 실시간 도시데이터**의 장소 영역 경계 | GeoJSON `[경도, 위도]` 닫힌 링으로 변환한다. 인천공항·공연장은 경계가 없으므로 직접 그린 영역을 쓴다 | `places.polygon` |
+| `backend/data/mock_demand.py` 장소 5곳 (`id`, `name`, `type`, `lat`, `lng`) | **서울 실시간 도시데이터** 장소 목록(121곳) + 인천공항 + **KOPIS** 공연장 | 1회 적재하고 장소 목록이 바뀌면 갱신한다. 출처별 `type`: `seoul_rtd` / `airport` / `venue`. 공연장 좌표는 KOPIS 공연시설 정보에서 가져오고, 121곳 밖에 있는 공연장만 `venue` 장소가 된다 (8.5) | `places` → `/heatmap`, `/places/{id}` |
+| `_polygon()`: 중심 좌표 주변의 근사 6각형 | **서울 실시간 도시데이터**의 장소 영역 경계 | GeoJSON `[경도, 위도]` 닫힌 링으로 변환한다. 인천공항은 직접 그린 영역, 121곳 밖 공연장은 반경 200m 원(자동 생성)을 쓴다. 공간 검색용 `geom`은 트리거가 `polygon`에서 계산한다 | `places.polygon`, `places.geom` |
 | `has_population` (목업에서는 인천공항만 `None`) | 출처로 판단 | `seoul_rtd`만 `true`. 인천공항·공연장(121곳에 포함되지 않은 경우)은 `false`이고 인구는 `null` | `places.has_population` |
 | `taxiStands`: "○○ 인근 승차대 (예시)" | **미정** (수집 목록에 없음) | 아래 4장 참고 | `/places/{id}` |
 | `backend/data/mock_places.py` 4곳 (검색용) | `places` 테이블 | `/places/search`가 `MOCK_PLACES` 대신 `places`에서 이름으로 검색한다 | `/places/search` |
@@ -88,9 +133,9 @@ KOPIS 공연 정보 ────────1일───→ 이벤트 수집기
 |---|---|---|---|
 | `airport`: "T1 입국 1,800명 예상", `peakAt`, `expectedExits` | **인천공항 승객예고** (시간대별 입국 승객 수) | 1시간마다 수집한다. 터미널별로 입국 승객이 가장 많은 시간대를 `peakAt`, 그 인원을 `expectedExits`로 쓴다 | `demand_events` (`airport`) → `/events`, `/alerts/top` |
 | `concert`: "KSPO DOME 공연 종료", `expectedExits: 12000` | **KOPIS 공연 정보** (공연장, 공연일시, 러닝타임) | 하루 1번 수집한다. 종료 시각 = 시작 시각 + 러닝타임. 규모는 공연장 좌석 수(`places.capacity`)로 추정한다. 러닝타임이 없으면 기본값을 쓰고 `raw`에 원본을 남긴다 | `demand_events` (`concert`) → `/events`, `/alerts/top` |
-| `last_train`: 홍대입구·강남·잠실 막차 | **지하철 막차 시각** | 1회 적재한다. 요청할 때마다 오늘의 요일 구분(평일/토/휴일)에 맞는 막차로 이벤트를 만든다. 역은 `place_id`로 장소에 연결한다 | `last_trains` → `/events` |
+| `last_train`: 홍대입구·강남·잠실 막차 | **지하철 막차 시각** | 1회 적재한다. 요청할 때마다 오늘의 요일 구분(평일/토/휴일)에 맞는 막차로 이벤트를 만든다(`last_train_events()`). 역은 `station_places` 연결표로 장소에 연결한다 | `last_trains` + `station_places` → `/events` |
 | 이벤트 출처 표시 `"(목업 · 실제 수집 데이터 아님)"` | 각 수집 출처 | `source`에 실제 출처 이름을 넣는다 | — |
-| — | — | 원본 기준 유니크 키를 걸어서 수집기를 다시 돌려도 이벤트가 중복되지 않게 한다 | — |
+| — | — | 원본 기준 유니크 키를 걸어서 수집기를 다시 돌려도 이벤트가 중복되지 않게 한다. 공항은 터미널·날짜, 공연은 `mt20id` 단위(`source_ref`)로 지우고 다시 만들어서, 구간이 바뀌거나 회차가 취소돼도 낡은 이벤트가 남지 않게 한다 | — |
 
 ### 3.4 수요 지수 (AI 파트)
 
@@ -158,9 +203,9 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 
 | 순서 | 작업 | 담당 | 비고 |
 |---|---|---|---|
-| 1 | 실데이터 테이블 생성, **실시간 도시데이터·인천공항 수집기 가동** | 백엔드 / A·B | 과거 데이터가 없으므로 가장 먼저. 상시 가동 환경 필요 |
-| 2 | `places` 적재 (121곳 경계 + 인천공항 + 공연장), 막차 시각 적재 | 백엔드 / A | |
-| 3 | KOPIS 수집기 가동 | 백엔드 / B | |
+| 1 | `supabase/schema.sql` 실행, `places` 적재 (121곳 경계 + 인천공항 T1·T2) | 백엔드 / A | 인구 로그가 `places`를 참조하므로 수집기보다 먼저 |
+| 2 | **실시간 도시데이터·인천공항 수집 스크립트와 워크플로 작성, Actions secrets 등록, `main`에 반영** | 백엔드 / A·B | 과거 데이터가 없으므로 가장 먼저. 수동 실행으로 해외 IP 차단 여부 확인. `collector_runs`로 실패 확인 |
+| 3 | 막차 시각·`station_places` 적재, KOPIS 수집 워크플로 가동 | 백엔드 / A·B | 121곳 밖 공연장은 KOPIS 수집 때 자동으로 `places`에 추가 |
 | 4 | 프런트 v2를 백엔드 목업 API에 연결 (목업 장소 5곳으로 통일) | 프런트 | 1~3과 병렬로 진행 가능 |
 | 5 | `/heatmap`·`/events`·`/places/*`가 목업 대신 DB를 읽도록 교체 | 백엔드 | 인구·이벤트는 실데이터, 수요 지수는 아직 목업 |
 | 6 | 표준노드링크 그래프 로드, `travel_minutes()` 교체 | AI / B | |
@@ -178,10 +223,12 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 3. **인구 표시**: 서울 실시간 도시데이터의 최소~최대 범위를 그대로 보여줄지, 중간값 하나로 보여줄지
 4. **공연 규모 추정**: 공연장 좌석 수 그대로 vs 비율 보정 (매진 여부를 알 수 없음)
 5. **급증 판정 기준**: 지수·인구 구간 경계 (검증 후 확정)
-6. **수집기 상시 가동 환경**: API 서버와 별도 프로세스 (백엔드 수정 사항 문서 결정 1)
+6. **저장소 공개 여부**: 비공개면 10분 수집만으로 GitHub Actions 무료 사용량(월 2,000분)을 넘는다 (1장 "수집 실행 환경")
+7. **예보 생성 작업 실행 환경**: `predict()`를 GitHub Actions 10분 워크플로로 돌릴지, 지연이 적은 다른 상시 환경을 쓸지
 
 확정된 사항:
 - 강수 등 기상 데이터는 수집하지 않는다 (2026-11-20)
+- 수집 데이터는 Supabase에 저장하고, 자동 수집은 GitHub Actions 예약 작업으로 돌린다 (2026-11-23, 1장 "수집 실행 환경")
 
 ---
 
@@ -203,7 +250,7 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 | 숫자 | 원본 숫자는 문자열로 온다(`"40000"`, `"15,000"`). 쉼표를 지우고 정수로 바꾼다. 바꿀 수 없으면 `null` |
 | 값 없음 | 구할 수 없는 값은 `0`이 아니라 `null`. 수집 실패는 `is_missing = true` |
 | 원본 보관 | 모든 수집 행은 응답 원문을 `raw`(jsonb)에 보관한다. 파싱 규칙을 고친 뒤 다시 계산할 수 있게 하기 위해서다 |
-| 중복 방지 | 수집 데이터마다 아래에 적은 유니크 키로 upsert한다. 수집기를 다시 돌려도 행이 늘지 않는다 |
+| 중복 방지 | 수집 데이터마다 아래에 적은 유니크 키로 upsert한다. 수집기를 다시 돌려도 행이 늘지 않는다. 수집 스크립트는 테이블에 직접 쓰지 않고 `supabase/schema.sql` 20장의 저장 함수를 RPC로 호출한다 (덮어쓰기 규칙을 DB 한곳에 둔다) |
 | 좌표 | 저장·API 모두 WGS84. 폴리곤은 GeoJSON `[경도, 위도]` 닫힌 링 |
 
 #### 장소 ID 규칙 (출처마다 다른 ID를 `places.id` 하나로 묶기)
@@ -212,8 +259,8 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 |---|---|---|---|
 | 서울 실시간 도시데이터 | `AREA_CD` | 원본 그대로 | `POI014` (강남역) |
 | 인천공항 | 터미널 | `ICN-T1`, `ICN-T2` | `ICN-T1` |
-| KOPIS 공연시설 | `mt10id` | 121곳 영역 안이면 **그 장소에 연결**, 밖이면 `KOPIS-{mt10id}` | KSPO DOME → `POI127` (올림픽공원) |
-| 지하철역 | `STATION_CD` | 역 → 장소 연결표로 121곳 장소에 연결 (8.3) | 홍대입구 `0239` → `POI055` |
+| KOPIS 공연시설 | `mt10id` | 121곳 영역 안이면 **그 장소에 연결**(겹치면 가장 작은 영역), 밖이면 `KOPIS-{mt10id}`. 연결 결과는 `venues.place_id` | KSPO DOME → `POI127` (올림픽공원) |
+| 지하철역 | `STATION_CD` | `station_places` 연결표로 121곳 장소에 연결 (8.3) | 홍대입구 `0239` → `POI055` |
 
 현재 목업 ID는 실데이터 ID로 바꾼다.
 
@@ -274,6 +321,8 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 
 - 유니크 키: `(place_id, observed_at)`. 서울시가 `PPLTN_TIME`을 아직 갱신하지 않았으면 같은 값이 다시 오므로 upsert로 중복을 막는다
 - 실패 처리: HTTP 오류이거나 `RESULT.CODE`가 `INFO-000`이 아니면 `observed_at` = 수집 시각을 10분 단위로 내린 값, `is_missing = true`, 인구 `null`로 저장한다
+- 저장: 수집 스크립트가 121곳 결과를 배열 하나로 모아 `record_population(rows)`를 한 번 호출한다. 실패 행이 같은 시각의 **정상 관측값을 덮어쓰지 않고**, 정상 행은 실패 행을 덮어쓴다
+- 최근값 조회: `latest_population` 뷰 (장소별 가장 최근 정상 관측값과 대표값 `population`)
 
 **주의: 서울시 예측은 1시간 단위다.** 응답의 `FCST_TIME`은 정시(20:00, 21:00 …)이고, 샘플에서는 관측 시각 18:30 다음 예측이 20:00이었다. 화면의 +30분·+60분 값을 그대로 꺼낼 수 없으므로 아래처럼 계산한다.
 
@@ -307,15 +356,16 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 | `INOUT_TAG` | 그대로 | `inout_tag` (**신규 컬럼 제안**) |
 | `LEFTTIME` (`"24:49:00"`) | **24시를 넘겨 표기된다.** 운행일 0시 기준 분으로 저장한다 (24:49 → 1489분) | `last_at` (분, 정수) |
 | 노선 | 이 응답에는 노선 필드가 없다. 역 검색 API나 역 코드표에서 채운다 | `line` |
-| (역 → 장소 연결표) | 아래 규칙 | `place_id` |
+| (역 → 장소 연결표) | 아래 규칙 | `station_places.place_id` |
 
 - 유니크 키: `(station_cd, day_type, inout_tag, direction)`
 - 같은 역·방향에 행선지별로 막차가 여러 개 온다(샘플: 을지로입구행 24:49, 성수행 24:33). 이벤트는 **역·방향마다 가장 늦은 막차 하나**로 만든다
-- **역 → 장소 연결**: 역 좌표는 수집 목록에 없다. 121곳 중 역 이름이 들어간 장소(예: `홍대입구역(2호선)`)를 역명으로 대응시킨 **연결표를 손으로 만든다**. 대상이 수십 곳이라 한 번 만들면 된다
+- **역 → 장소 연결**: 역 좌표는 수집 목록에 없다. 121곳 중 역 이름이 들어간 장소(예: `홍대입구역(2호선)`)를 역명으로 대응시킨 **연결표를 손으로 만든다**. 대상이 수십 곳이라 한 번 만들면 된다. 막차를 다시 적재해도 연결이 지워지지 않도록 `last_trains`와 분리된 `station_places (station_cd, station, place_id)`에 둔다. 연결표에 없는 역은 이벤트를 만들지 않는다
+- 이벤트 생성: `/events`가 `last_train_events(운행일, day_type)`를 호출한다. 아래 표의 계산을 DB 함수가 한다
 
 | API 필드 (`/events`) | 계산 |
 |---|---|
-| `id` | `last_train-{station_cd}-{운행일}` |
+| `id` | `last_train-{station_cd}-{inout_tag}-{운행일}` (역마다 방향 2개라 `inout_tag`를 넣어야 겹치지 않는다) |
 | `placeId` | 연결표의 `place_id` |
 | `type` | `last_train` |
 | `title` | `"{역명} 막차 {HH:MM}"` |
@@ -363,6 +413,9 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 
 17시 갱신 전후로 값이 바뀔 수 있으므로 1시간마다 다시 받아 같은 키로 덮어쓴다. 덮어쓴 뒤 이벤트도 다시 만든다.
 
+- 저장: 수집 스크립트가 `record_airport_arrivals(rows, ratio)`를 호출한다. 시간대를 upsert한 뒤 받은 터미널·날짜마다 `rebuild_airport_events()`가 그날의 공항 이벤트를 지우고 위 규칙으로 다시 만든다. `ratio` 기본값은 1.5 (결정 D)
+- 이벤트 `raw`에 구간 시작·끝·피크 시, 기준값, 배수를 남긴다
+
 `places`에는 `ICN-T1`, `ICN-T2`를 직접 넣는다(`type = 'airport'`, 영역은 터미널 주변을 손으로 그림, `has_population = false`). 현재 목업에는 T1만 있다.
 
 ### 8.5 KOPIS 공연 정보 (1일 수집) 📄 문서 확인
@@ -384,13 +437,15 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 
 공연시설 → 장소:
 
+한 장소에 공연시설이 여러 개 있을 수 있다(올림픽공원 `POI127` 안에 KSPO DOME, 올림픽홀, 핸드볼경기장 등). 그래서 `places`에 시설 ID 컬럼 하나를 두지 않고 `venues` 표에서 시설 → 장소를 연결한다. 수집 스크립트는 시설마다 `upsert_kopis_venue(...)`를 호출하고, 아래 연결·생성은 함수가 한다.
+
 | 원본 필드 (공연시설상세) | 변환 | 저장 |
 |---|---|---|
-| `mt10id` | 그대로 | `places.kopis_facility_id` (**신규 컬럼 제안**) |
-| `fcltynm` | 그대로 | 새 장소일 때 `places.name` |
-| `la`, `lo` (위도, 경도 문자열) | 실수로 바꿔 **121곳 영역 안에 있는지 검사**한다. 안이면 그 장소에 연결하고, 밖이면 `KOPIS-{mt10id}` 장소를 새로 만든다 (`type = 'venue'`, 영역 = 좌표 중심 반경 약 200m 원, `has_population = false`) | `places` |
-| `mt13s[]` (`mt13id`, `prfplcnm`, `seatscale`) | 공연장(홀)별 좌석 수. `"15,000"` → 15000 | `venue_halls` (**신규 제안**) |
-| `seatscale` (시설 전체 객석 수) | 홀 좌석 수가 없을 때만 쓴다 | — |
+| `mt10id` | 그대로 | `venues.mt10id` |
+| `fcltynm` | 그대로 | `venues.name`, 새 장소일 때 `places.name` |
+| `la`, `lo` (위도, 경도 문자열) | 실수로 바꿔 **121곳 영역 안에 있는지 검사**한다(`find_place_at()`, 겹치면 가장 작은 영역). 안이면 그 장소에 연결하고, 밖이면 `KOPIS-{mt10id}` 장소를 새로 만든다 (`type = 'venue'`, 영역 = 좌표 중심 반경 200m 원, `has_population = false`). 한 번 연결되면 다시 검사하지 않는다 | `venues.lat`·`lng`·`place_id`, `places` |
+| `mt13s[]` (`mt13id`, `prfplcnm`, `seatscale`) | 공연장(홀)별 좌석 수. `"15,000"` → 15000 | `venue_halls` |
+| `seatscale` (시설 전체 객석 수) | 홀 좌석 수가 없을 때만 쓴다 | `venues.seats` |
 
 공연 → 이벤트:
 
@@ -414,6 +469,8 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 | `endsAt` | `peakAt` + 30분 (퇴장 구간) |
 | `expectedExits` | 홀 좌석 수(`mt13s[].seatscale`). 매진 여부는 알 수 없다 (결정 4) |
 | `source` | `"KOPIS"`. 화면에 출처 "(재)예술경영지원센터 공연예술통합전산망"을 표기한다 ⚠️ 이용 조건 확인 |
+
+저장: 수집 스크립트가 공연 하나의 회차 목록을 만들어 `replace_concert_events(mt20id, events)`를 호출한다. 그 공연의 **앞으로 남은 회차를 지우고 새 목록으로 바꾼다**. 일정이 바뀌거나 회차가 취소돼도 낡은 이벤트가 남지 않고, 지난 회차는 리플레이·검증용으로 남는다.
 
 `dtguidance`는 사람이 쓴 문장이라 공연마다 형식이 다를 수 있다. 파싱하지 못한 공연은 이벤트를 만들지 않고 로그에 남겨서, 규칙을 보강하거나 직접 입력한다. 소규모 공연까지 모두 넣으면 이벤트가 너무 많아지므로 **좌석 수 기준 이상인 홀만** 이벤트로 만든다 (8.9 결정 E).
 
@@ -457,13 +514,13 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 | `/heatmap`, `/places/{id}` | `id`, `name`, `type`, `lat`, `lng`, `polygon` | `places` (8.1, 8.4, 8.5) |
 | | `points[].surgeIndex` | `surge_predictions.surge_index` (가장 최근 `base_time`, `offset_min` = offset) |
 | | `points[].range` | `surge_index` + 급증 판정 기준 (결정 5) |
-| | `points[].population`, `populationRange` | `realtime_pop_log` (8.2 계산 규칙) |
+| | `points[].population`, `populationRange` | `latest_population` 뷰 / `realtime_pop_log` (8.2 계산 규칙) |
 | | `generatedAt` | `surge_predictions.generated_at` |
 | | `source` | `surge_predictions.source` (`mock` / `model`) |
 | `/places/{id}` | `reasons` | `surge_predictions.reasons` |
 | | `events` | 아래 `/events`를 그 장소로 거른 것 |
 | | `taxiStands` | 미정 (4장) |
-| `/events` | `id`, `placeId`, `type`, `title`, `peakAt`, `endsAt`, `expectedExits`, `source` | `demand_events` (8.4, 8.5) + `last_trains`로 그날 만든 이벤트 (8.3) |
+| `/events` | `id`, `placeId`, `type`, `title`, `peakAt`, `endsAt`, `expectedExits`, `source` | `demand_events` (8.4, 8.5) + `last_train_events(운행일, day_type)` (8.3) |
 | `/alerts/top` | `travelMinutes`, `recommendedDepartureAt`, `arrivalAt` | `travel_minutes()` (8.6) |
 | | `peakStart`, `peakEnd`, `reason` | 이벤트의 `peakAt`·`endsAt`, 예보 `reasons` |
 | | `surgeIndexAtArrival` | 도착 시각에 해당하는 offset의 `surge_index` |
