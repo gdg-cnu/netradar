@@ -389,8 +389,8 @@ CREATE TABLE IF NOT EXISTS public.places (
 
     polygon JSONB NOT NULL              -- GeoJSON [경도, 위도] 닫힌 링 (API 응답용)
         CHECK (jsonb_typeof(polygon) = 'array'),
-    geom extensions.geometry(Polygon, 4326),  -- polygon에서 트리거로 계산 (공간 검색용)
-    lat DOUBLE PRECISION NOT NULL,      -- 대표점 (폴리곤 안쪽 점)
+    geom extensions.geometry(Geometry, 4326),  -- polygon에서 트리거로 계산 (공간 검색용)
+    lat DOUBLE PRECISION NOT NULL,      -- 대표점 (폴리곤 안쪽 점). 비워서 넣으면 트리거가 채운다
     lng DOUBLE PRECISION NOT NULL,
 
     capacity INTEGER CHECK (capacity >= 0),  -- venue 장소의 객석 수
@@ -405,23 +405,38 @@ CREATE TABLE IF NOT EXISTS public.places (
 CREATE INDEX IF NOT EXISTS idx_places_geom
 ON public.places USING gist (geom);
 
--- polygon → geom 계산, updated_at 갱신
+-- polygon → geom 계산 (꼬인 도형은 ST_MakeValid로 고침), 대표점 계산, updated_at 갱신
+-- 대표점은 lat·lng가 비어 있거나, 폴리곤만 바뀌고 대표점은 그대로일 때 다시 구한다
 -- PostGIS 함수가 내부에서 다른 함수를 스키마 없이 부르므로 search_path에 extensions를 둔다
 CREATE OR REPLACE FUNCTION public.places_before_write()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = extensions
 AS $$
+DECLARE
+    v_point extensions.geometry;
 BEGIN
-    NEW.geom := extensions.ST_SetSRID(
-        extensions.ST_GeomFromGeoJSON(
-            jsonb_build_object(
-                'type', 'Polygon',
-                'coordinates', jsonb_build_array(NEW.polygon)
-            )::text
-        ),
-        4326
+    NEW.geom := extensions.ST_MakeValid(
+        extensions.ST_SetSRID(
+            extensions.ST_GeomFromGeoJSON(
+                jsonb_build_object(
+                    'type', 'Polygon',
+                    'coordinates', jsonb_build_array(NEW.polygon)
+                )::text
+            ),
+            4326
+        )
     );
+
+    IF NEW.lat IS NULL OR NEW.lng IS NULL
+       OR (TG_OP = 'UPDATE'
+           AND NEW.polygon IS DISTINCT FROM OLD.polygon
+           AND NEW.lat = OLD.lat AND NEW.lng = OLD.lng) THEN
+        v_point := extensions.ST_PointOnSurface(NEW.geom);
+        NEW.lat := extensions.ST_Y(v_point);
+        NEW.lng := extensions.ST_X(v_point);
+    END IF;
+
     NEW.updated_at := NOW();
     RETURN NEW;
 END;
@@ -434,6 +449,18 @@ BEFORE INSERT OR UPDATE
 ON public.places
 FOR EACH ROW
 EXECUTE FUNCTION public.places_before_write();
+
+-- 인천공항 터미널 (공식 경계가 없어 터미널 건물 주변을 직접 그린 근사 영역. 필요하면 고친다)
+-- 121곳은 collect-citydata가 backend/collectors/data/seoul_places.json으로 자동 적재한다
+INSERT INTO public.places (id, name, type, polygon, has_population)
+VALUES
+    ('ICN-T1', '인천공항 제1여객터미널', 'airport',
+     '[[126.4440,37.4455],[126.4575,37.4455],[126.4575,37.4525],[126.4440,37.4525],[126.4440,37.4455]]',
+     FALSE),
+    ('ICN-T2', '인천공항 제2여객터미널', 'airport',
+     '[[126.4265,37.4650],[126.4400,37.4650],[126.4400,37.4720],[126.4265,37.4720],[126.4265,37.4650]]',
+     FALSE)
+ON CONFLICT (id) DO NOTHING;
 
 -- trips.target_place_id → places
 DO $$
@@ -904,11 +931,16 @@ BEGIN
 END;
 $$;
 
--- 20.6 공연 하나의 앞으로 남은 회차를 통째로 교체
--- 일정이 바뀌거나 회차가 취소돼도 지난 회차는 남고 미래 회차는 새 목록으로 바뀐다
-CREATE OR REPLACE FUNCTION public.replace_concert_events(
-    p_mt20id TEXT,
-    p_events JSONB                      -- [{id, place_id, title, peak_at, ends_at, expected_exits, raw}]
+-- 20.6 공연 회차 동기화 (KOPIS 수집 1회 = 호출 1회)
+-- 받은 공연(p_mt20ids)의 앞으로 남은 회차를 지우고 p_events로 바꾼다.
+-- p_full_sync = TRUE면(공연 목록을 빠짐없이 받은 경우) 목록에서 사라진 공연의 미래 회차도 지운다.
+-- 지난 회차는 리플레이·검증용으로 남긴다
+DROP FUNCTION IF EXISTS public.replace_concert_events(TEXT, JSONB);
+
+CREATE OR REPLACE FUNCTION public.sync_concert_events(
+    p_mt20ids TEXT[],
+    p_events JSONB,                     -- [{id, place_id, source_ref, title, peak_at, ends_at, expected_exits, raw}]
+    p_full_sync BOOLEAN DEFAULT FALSE
 )
 RETURNS INTEGER
 LANGUAGE plpgsql
@@ -919,8 +951,8 @@ DECLARE
 BEGIN
     DELETE FROM public.demand_events
     WHERE type = 'concert'
-      AND source_ref = p_mt20id
-      AND peak_at >= NOW();
+      AND peak_at >= NOW()
+      AND (p_full_sync OR source_ref = ANY (p_mt20ids));
 
     INSERT INTO public.demand_events (
         id, place_id, type, title, peak_at, ends_at,
@@ -928,10 +960,11 @@ BEGIN
     )
     SELECT
         e.id, e.place_id, 'concert', e.title, e.peak_at, e.ends_at,
-        e.expected_exits, 'KOPIS', p_mt20id, e.raw
+        e.expected_exits, 'KOPIS', e.source_ref, e.raw
     FROM jsonb_to_recordset(p_events) AS e(
         id TEXT,
         place_id TEXT,
+        source_ref TEXT,
         title TEXT,
         peak_at TIMESTAMPTZ,
         ends_at TIMESTAMPTZ,
@@ -1046,7 +1079,7 @@ REVOKE ALL ON FUNCTION
     public.rebuild_airport_events(TEXT, DATE, NUMERIC),
     public.record_airport_arrivals(JSONB, NUMERIC),
     public.upsert_kopis_venue(TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER, JSONB, JSONB),
-    public.replace_concert_events(TEXT, JSONB),
+    public.sync_concert_events(TEXT[], JSONB, BOOLEAN),
     public.last_train_events(DATE, TEXT)
 FROM PUBLIC, anon, authenticated;
 
@@ -1056,6 +1089,6 @@ GRANT EXECUTE ON FUNCTION
     public.rebuild_airport_events(TEXT, DATE, NUMERIC),
     public.record_airport_arrivals(JSONB, NUMERIC),
     public.upsert_kopis_venue(TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER, JSONB, JSONB),
-    public.replace_concert_events(TEXT, JSONB),
+    public.sync_concert_events(TEXT[], JSONB, BOOLEAN),
     public.last_train_events(DATE, TEXT)
 TO service_role;
