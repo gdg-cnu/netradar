@@ -41,8 +41,10 @@
 
 | 구성 | 역할 | 위치 |
 |---|---|---|
-| GitHub Actions 워크플로 | 정해진 시각에 수집 스크립트 실행 (cron 시각은 UTC). 수동 실행용 `workflow_dispatch`도 둔다 | `.github/workflows/collect-*.yml` (작성 예정) |
-| 수집 스크립트 (Python) | 원본 API 호출 → 파싱 → 저장 함수(RPC) 호출. 백엔드와 같은 `supabase`·`httpx` 패키지를 쓴다 | `backend/collectors/` (작성 예정) |
+| GitHub Actions 워크플로 | 정해진 시각에 수집 스크립트 실행 (cron 시각은 UTC). 수동 실행용 `workflow_dispatch`도 둔다 | `.github/workflows/collect-citydata.yml`, `collect-airport.yml`, `collect-kopis.yml` |
+| 수집 스크립트 (Python) | 원본 API 호출 → 파싱 → 저장 함수(RPC) 호출. 백엔드와 같은 `supabase`·`httpx` 패키지를 쓴다 | `backend/collectors/` (`citydata.py`, `airport.py`, `kopis.py`) |
+| 121곳 영역 | OA-21778 Shapefile을 JSON으로 바꿔 저장소에 둔다. `collect-citydata`가 실행마다 DB와 비교해서 없거나 바뀐 장소를 넣는다 | `backend/collectors/data/seoul_places.json` (변환: `collectors/tools/build_seoul_places.py`) |
+| 인천공항 T1·T2 | 직접 그린 근사 영역 | `supabase/schema.sql` 11장 (스키마 실행 때 들어감) |
 | 저장 함수 | 중복 방지·덮어쓰기 규칙·이벤트 생성을 DB 안에서 처리 | `supabase/schema.sql` 20장 |
 | `collector_runs` | 실행마다 시작·종료·상태·행 수·오류를 남긴다 | `supabase/schema.sql` 19장 |
 
@@ -50,7 +52,17 @@
 |---|---|---|---|
 | `collect-citydata` | `*/10 * * * *` | 10분마다 | `record_population(rows)` |
 | `collect-airport` | `5 * * * *` | 매시 5분 | `record_airport_arrivals(rows, ratio)` |
-| `collect-kopis` | `0 21 * * *` | 매일 06:00 | `upsert_kopis_venue(...)`, `replace_concert_events(mt20id, events)` |
+| `collect-kopis` | `0 21 * * *` | 매일 06:00 | `upsert_kopis_venue(...)`, `sync_concert_events(mt20ids, events, full)` |
+
+#### 처음 켜는 순서
+
+1. Supabase SQL Editor에서 `supabase/schema.sql` 전체를 한 번 실행한다 (테이블·함수·인천공항 장소 생성)
+2. GitHub 저장소 Settings → Secrets and variables → Actions에 아래 5개를 등록한다
+3. 수집 파일을 `main`에 반영한다
+4. Actions 탭에서 `Collect citydata` → Run workflow로 한 번 수동 실행한다. 첫 실행이 121곳 장소를 자동으로 넣는다
+5. Supabase에서 `collector_runs`를 확인한다 (`status = ok`면 정상, `partial`이면 `error`에 실패 장소와 사유)
+
+이후는 예약 시각마다 자동으로 돈다. 설정값(선택)은 워크플로 `env`에 넣는다: `AIRPORT_EVENT_RATIO`(기본 1.5), `KOPIS_MIN_SEATS`(기본 1000), `KOPIS_DAYS`(기본 7), `CITYDATA_STORE_RAW`(기본 끔).
 
 비밀값은 GitHub 저장소의 Actions secrets에 둔다. 저장소에 커밋하지 않는다.
 
@@ -72,9 +84,11 @@ GitHub Actions 예약 작업의 제약과 대응:
 | 비공개 저장소는 무료 사용량이 월 2,000분이고 **실행마다 1분 단위로 올림**된다 | 10분 수집만으로 하루 144회 × 1분 이상 ≈ 월 4,300분 이상이라 무료 사용량을 넘는다 | 저장소를 공개로 두거나(공개 저장소의 표준 러너는 무료), 비용을 감수한다 (결정 6) |
 | 같은 워크플로가 겹쳐 돌 수 있다 | 앞 실행이 늦게 끝나면 다음 실행과 겹친다 | 워크플로마다 `concurrency` 그룹을 두고 `cancel-in-progress: false`로 겹치지 않게 한다 |
 
-- 실시간 도시데이터는 1회 실행에 121곳을 호출한다. 동시에 10곳 정도씩 나눠 호출해서 1~2분 안에 끝낸다
+- 실시간 도시데이터는 1회 실행에 121곳을 8곳씩 동시에 호출한다 (로컬 측정 약 2초)
 - ⚠️ GitHub 러너는 해외(Azure) IP다. 국내 공공 API가 해외 IP를 막는지 첫 수동 실행(`workflow_dispatch`)으로 먼저 확인한다
-- 1회 적재(121곳 영역, 막차 시각, 역 → 장소 연결표, 인천공항 영역)는 로컬 스크립트로 넣는다. 필요하면 수동 실행 워크플로로 만든다
+- ⚠️ **DB 용량**: 인구 로그는 하루 최대 약 1.7만 행(121곳 × 144회)이고 서울시 예측 12개를 함께 저장해서 한 행이 약 1KB다. 하루 약 17MB, 한 달 약 500MB로 Supabase 무료 한도(500MB)에 한 달 안에 닿는다. 그래서 인구 로그의 `raw`는 기본으로 저장하지 않는다. 장기 수집이면 유료 플랜이나 오래된 행 정리 규칙이 필요하다 (결정 8)
+- 수집 로그에는 인증키가 찍히지 않게 한다 (httpx 요청 로그 끔, 오류 메시지에서 키와 URL 인코딩 형태를 가림)
+- 막차 시각·역 → 장소 연결표는 아직 적재 스크립트가 없다 (1회 적재, 이벤트 API 작업 때 함께 만든다)
 - 예보 생성(`predict()`)도 같은 방식(10분 워크플로)으로 돌릴 수 있지만, 예약 지연이 그대로 예보 지연이 된다. 프런트는 20분이 지나면 신선도를 회색으로 표시하므로 지연이 잦으면 다른 상시 환경을 검토한다 (결정 7)
 
 강수 등 기상 데이터는 수집하지 않는다(2026-11-20 결정). 날씨 보정은 하지 않는다.
@@ -203,9 +217,9 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 
 | 순서 | 작업 | 담당 | 비고 |
 |---|---|---|---|
-| 1 | `supabase/schema.sql` 실행, `places` 적재 (121곳 경계 + 인천공항 T1·T2) | 백엔드 / A | 인구 로그가 `places`를 참조하므로 수집기보다 먼저 |
-| 2 | **실시간 도시데이터·인천공항 수집 스크립트와 워크플로 작성, Actions secrets 등록, `main`에 반영** | 백엔드 / A·B | 과거 데이터가 없으므로 가장 먼저. 수동 실행으로 해외 IP 차단 여부 확인. `collector_runs`로 실패 확인 |
-| 3 | 막차 시각·`station_places` 적재, KOPIS 수집 워크플로 가동 | 백엔드 / A·B | 121곳 밖 공연장은 KOPIS 수집 때 자동으로 `places`에 추가 |
+| 1 | `supabase/schema.sql` 실행 (인천공항 T1·T2 장소 포함) | 백엔드 / A | 인구 로그가 `places`를 참조하므로 수집기보다 먼저 |
+| 2 | **Actions secrets 5개 등록, 수집 워크플로를 `main`에 반영, 수동 실행으로 확인** | 백엔드 / A·B | 과거 데이터가 없으므로 가장 먼저. 121곳 장소는 첫 실행이 자동 적재. 해외 IP 차단 여부와 `collector_runs` 확인 (1장 "처음 켜는 순서") |
+| 3 | 막차 시각·`station_places` 적재 | 백엔드 / A | 적재 스크립트 작성 필요. 121곳 밖 공연장은 KOPIS 수집 때 자동으로 `places`에 추가 |
 | 4 | 프런트 v2를 백엔드 목업 API에 연결 (목업 장소 5곳으로 통일) | 프런트 | 1~3과 병렬로 진행 가능 |
 | 5 | `/heatmap`·`/events`·`/places/*`가 목업 대신 DB를 읽도록 교체 | 백엔드 | 인구·이벤트는 실데이터, 수요 지수는 아직 목업 |
 | 6 | 표준노드링크 그래프 로드, `travel_minutes()` 교체 | AI / B | |
@@ -225,6 +239,7 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 5. **급증 판정 기준**: 지수·인구 구간 경계 (검증 후 확정)
 6. **저장소 공개 여부**: 비공개면 10분 수집만으로 GitHub Actions 무료 사용량(월 2,000분)을 넘는다 (1장 "수집 실행 환경")
 7. **예보 생성 작업 실행 환경**: `predict()`를 GitHub Actions 10분 워크플로로 돌릴지, 지연이 적은 다른 상시 환경을 쓸지
+8. **DB 용량**: 인구 로그가 한 달 약 500MB. Supabase 유료 플랜 / 오래된 로그 정리(예: 90일 지난 행의 `seoul_forecast` 비우기) / 수집 주기 조정
 
 확정된 사항:
 - 강수 등 기상 데이터는 수집하지 않는다 (2026-11-20)
@@ -470,7 +485,9 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 | `expectedExits` | 홀 좌석 수(`mt13s[].seatscale`). 매진 여부는 알 수 없다 (결정 4) |
 | `source` | `"KOPIS"`. 화면에 출처 "(재)예술경영지원센터 공연예술통합전산망"을 표기한다 ⚠️ 이용 조건 확인 |
 
-저장: 수집 스크립트가 공연 하나의 회차 목록을 만들어 `replace_concert_events(mt20id, events)`를 호출한다. 그 공연의 **앞으로 남은 회차를 지우고 새 목록으로 바꾼다**. 일정이 바뀌거나 회차가 취소돼도 낡은 이벤트가 남지 않고, 지난 회차는 리플레이·검증용으로 남는다.
+저장: 수집 스크립트가 모든 공연의 회차를 모아 `sync_concert_events(mt20ids, events, full)`를 **한 번** 호출한다. 받은 공연의 **앞으로 남은 회차를 지우고 새 목록으로 바꾼다**. 공연 목록을 빠짐없이 받았고 상세 호출 실패가 없으면(`full = true`) 목록에서 사라진(취소된) 공연의 미래 회차도 지운다. 지난 회차는 리플레이·검증용으로 남는다.
+
+홀 특정: 공연상세의 `fcltynm`(예: `올림픽공원 (KSPO DOME(올림픽체조경기장))`)에 이름이 들어 있는 홀을 고른다(여러 개면 가장 긴 이름). 못 찾았는데 홀이 하나뿐이면 그 홀, 홀이 여러 개인데 특정하지 못하면 이벤트를 만들지 않고 로그에 남긴다. 공연상세에는 홀 ID(`mt13id`)가 없다.
 
 `dtguidance`는 사람이 쓴 문장이라 공연마다 형식이 다를 수 있다. 파싱하지 못한 공연은 이벤트를 만들지 않고 로그에 남겨서, 규칙을 보강하거나 직접 입력한다. 소규모 공연까지 모두 넣으면 이벤트가 너무 많아지므로 **좌석 수 기준 이상인 홀만** 이벤트로 만든다 (8.9 결정 E).
 
