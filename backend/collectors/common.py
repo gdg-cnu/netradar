@@ -67,6 +67,13 @@ def redact(text: str) -> str:
     return text
 
 
+def normalize_key(key: str) -> str:
+    """공공데이터포털의 Encoding 키를 넣어도 되도록 디코딩한다. httpx가 다시 인코딩한다."""
+    from urllib.parse import unquote
+
+    return unquote(key) if "%" in key else key
+
+
 def run_main(main) -> None:
     """수집 스크립트 진입점. 예외는 비밀값을 가린 로그만 남기고 종료 코드 1로 끝낸다."""
     try:
