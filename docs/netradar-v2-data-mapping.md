@@ -5,6 +5,7 @@
 - 목적: 지금 쓰는 목업이 어디에 있고, **어떤 수집 데이터와 로직으로 바꿔야 하는지** 한곳에 정리한다
 - 테이블 컬럼과 API 응답 필드의 자세한 내용은 백엔드 수정 사항 문서(4장, 7장)를 따른다. 이 문서는 "무엇을 무엇으로 바꾸는가"만 다룬다
 - 수정 (2026-11-23): 수집 데이터를 **Supabase**에 저장하고 자동 수집은 **GitHub Actions** 예약 작업으로 돌리기로 했다. 테이블·저장 함수는 [`supabase/schema.sql`](../supabase/schema.sql) 11~21장에 반영했다. 공연시설은 `places.kopis_facility_id` 대신 `venues` 표로, 역 → 장소 연결은 `station_places` 표로 바꿨다
+- 수정 (2026-11-24): 2026-11-20의 "기상 데이터는 수집하지 않는다" 결정을 바꿔 **기상청 시간별 강수**를 수집한다 (`collect-weather`, `precip_hourly`, 8.11). 강수는 5km 격자 단위라 `places`에 기상청 격자(`kma_nx`, `kma_ny`)를 추가했다
 
 ---
 
@@ -18,6 +19,7 @@
 | 지하철 막차 시각 | 막차 이후 이탈 시점 | 1회 적재, 시간표 변경 시 갱신 | `last_trains` | 서비스 |
 | 서울시 시간대별 택시 이용건수 | 시간대 계수 | 1회 가공 (AI 설정값) | AI 모듈 설정 | AI 입력 |
 | 서울시 심야 승차난 지점 목록 | 검증: 핫스팟 보조 정답 | 1회 | AI 노트북 | 검증 |
+| 기상청 시간별 강수 (초단기실황·초단기예보) | 비 올 때 택시 수요 보정 | 상시 수집기 (1시간) | `precip_hourly` (격자 단위, `places.kma_nx`·`kma_ny`로 연결) | AI 입력 |
 
 ### 파트 B: 이벤트·이동
 
@@ -35,14 +37,16 @@
 | 상시 수집기 | 실시간 도시데이터(10분) | 인천공항(1시간), KOPIS(1일) |
 | 검증 데이터 | 승차난 지점 | 택시 OD 상위 10개소 |
 
+기상청 강수 수집기(1시간)는 2026-11-24에 추가했고 담당 파트는 아직 정하지 않았다.
+
 ### 수집 실행 환경: GitHub Actions → Supabase
 
 자동 수집은 GitHub Actions 예약 작업(`schedule`)이 Python 수집 스크립트를 실행하고, 스크립트가 Supabase에 저장한다. API 서버와 따로 돌아서 API 서버가 꺼져도 수집은 계속된다.
 
 | 구성 | 역할 | 위치 |
 |---|---|---|
-| GitHub Actions 워크플로 | 정해진 시각에 수집 스크립트 실행 (cron 시각은 UTC). 수동 실행용 `workflow_dispatch`도 둔다 | `.github/workflows/collect-citydata.yml`, `collect-airport.yml`, `collect-kopis.yml` |
-| 수집 스크립트 (Python) | 원본 API 호출 → 파싱 → 저장 함수(RPC) 호출. 백엔드와 같은 `supabase`·`httpx` 패키지를 쓴다 | `backend/collectors/` (`citydata.py`, `airport.py`, `kopis.py`) |
+| GitHub Actions 워크플로 | 정해진 시각에 수집 스크립트 실행 (cron 시각은 UTC). 수동 실행용 `workflow_dispatch`도 둔다 | `.github/workflows/collect-citydata.yml`, `collect-airport.yml`, `collect-kopis.yml`, `collect-weather.yml` |
+| 수집 스크립트 (Python) | 원본 API 호출 → 파싱 → 저장 함수(RPC) 호출. 백엔드와 같은 `supabase`·`httpx` 패키지를 쓴다 | `backend/collectors/` (`citydata.py`, `airport.py`, `kopis.py`, `weather.py`) |
 | 121곳 영역 | OA-21778 Shapefile을 JSON으로 바꿔 저장소에 둔다. `collect-citydata`가 실행마다 DB와 비교해서 없거나 바뀐 장소를 넣는다 | `backend/collectors/data/seoul_places.json` (변환: `collectors/tools/build_seoul_places.py`) |
 | 인천공항 T1·T2 | 직접 그린 근사 영역 | `supabase/schema.sql` 11장 (스키마 실행 때 들어감) |
 | 저장 함수 | 중복 방지·덮어쓰기 규칙·이벤트 생성을 DB 안에서 처리 | `supabase/schema.sql` 20장 |
@@ -53,6 +57,7 @@
 | `collect-citydata` | `*/10 * * * *` | 10분마다 | `record_population(rows)` |
 | `collect-airport` | `5 * * * *` | 매시 5분 | `record_airport_arrivals(rows, ratio)` |
 | `collect-kopis` | `0 21 * * *` | 매일 06:00 | `upsert_kopis_venue(...)`, `sync_concert_events(mt20ids, events, full)` |
+| `collect-weather` | `50 * * * *` | 매시 50분 | `record_precip(rows)` |
 
 #### 처음 켜는 순서
 
@@ -62,7 +67,7 @@
 4. Actions 탭에서 `Collect citydata` → Run workflow로 한 번 수동 실행한다. 첫 실행이 121곳 장소를 자동으로 넣는다
 5. Supabase에서 `collector_runs`를 확인한다 (`status = ok`면 정상, `partial`이면 `error`에 실패 장소와 사유)
 
-이후는 예약 시각마다 자동으로 돈다. 설정값(선택)은 워크플로 `env`에 넣는다: `AIRPORT_EVENT_RATIO`(기본 1.5), `KOPIS_MIN_SEATS`(기본 1000), `KOPIS_DAYS`(기본 7), `CITYDATA_STORE_RAW`(기본 끔).
+이후는 예약 시각마다 자동으로 돈다. 설정값(선택)은 워크플로 `env`에 넣는다: `AIRPORT_EVENT_RATIO`(기본 1.5), `KOPIS_MIN_SEATS`(기본 1000), `KOPIS_DAYS`(기본 7), `CITYDATA_STORE_RAW`(기본 끔), `WEATHER_NCST_HOURS`(기본 3).
 
 비밀값은 GitHub 저장소의 Actions secrets에 둔다. 저장소에 커밋하지 않는다.
 
@@ -71,7 +76,7 @@
 | `SUPABASE_URL` | Supabase 프로젝트 URL |
 | `SUPABASE_SECRET_KEY` | service role(secret) 키. 백엔드 `.env`와 같은 이름 |
 | `SEOUL_API_KEY` | 서울 열린데이터광장 인증키 (실시간 도시데이터, 막차) |
-| `DATA_GO_KR_KEY` | 공공데이터포털 인증키 (인천공항) |
+| `DATA_GO_KR_KEY` | 공공데이터포털 인증키 (인천공항, 기상청 단기예보). 같은 키라도 포털에서 **서비스마다 활용신청**을 해야 호출된다 |
 | `KOPIS_API_KEY` | KOPIS 인증키 |
 
 GitHub Actions 예약 작업의 제약과 대응:
@@ -91,7 +96,7 @@ GitHub Actions 예약 작업의 제약과 대응:
 - 막차 시각·역 → 장소 연결표는 아직 적재 스크립트가 없다 (1회 적재, 이벤트 API 작업 때 함께 만든다)
 - 예보 생성(`predict()`)도 같은 방식(10분 워크플로)으로 돌릴 수 있지만, 예약 지연이 그대로 예보 지연이 된다. 프런트는 20분이 지나면 신선도를 회색으로 표시하므로 지연이 잦으면 다른 상시 환경을 검토한다 (결정 7)
 
-강수 등 기상 데이터는 수집하지 않는다(2026-11-20 결정). 날씨 보정은 하지 않는다.
+기상청 시간별 강수는 1시간마다 수집한다(2026-11-24, 2026-11-20의 "수집하지 않음" 결정을 바꿈). 강수로 수요를 어떻게 보정할지는 AI 파트가 정한다 (3.4, 8.11).
 
 서울 실시간 도시데이터와 인천공항 승객예고는 **과거 데이터를 제공하지 않는다**. 수집을 시작한 날부터만 리플레이·검증 데이터가 쌓이므로 다른 작업보다 먼저 수집기를 띄운다.
 
@@ -106,7 +111,7 @@ GitHub Actions 예약 작업의 제약과 대응:
 KOPIS 공연 정보 ────────1일───→ 이벤트 수집기 ─────→ demand_events ─────┤→ /heatmap
 인천공항 승객예고 ──────1시간─→ 이벤트 수집기 ─────→ demand_events ─────┤  /places/{id}
 지하철 막차 시각 ───────1회───→ 적재 ───────────────→ last_trains ───────┤  /events
-                                                                          │  /alerts/top
+기상청 시간별 강수 ─────1시간─→ 강수 수집기 ───────→ precip_hourly ─────┤  /alerts/top
 위 DB + 시간대별 택시 이용건수 ─10분─→ AI predict() ─→ surge_predictions ─┤  /replay/*
                                                                           │
 국토부 표준노드링크 ─────────────────→ AI travel_minutes() ───────────────┴→ /alerts/top
@@ -155,7 +160,7 @@ KOPIS 공연 정보 ────────1일───→ 이벤트 수집기
 
 | 현재 목업 | 바꿀 로직 | 입력 데이터 | 저장 → API |
 |---|---|---|---|
-| `backend/services/prediction.py`의 `predict()` → `surge[0/30/60]` 고정값 (0~100) | **AI 예측 모델**. 함수 모양 `predict(base_time, offsets)`는 유지하고 내용만 교체한다 | `realtime_pop_log`(인구·서울시 예측), `demand_events`, `last_trains`, **시간대별 택시 이용건수**(시간대 계수) | 10분마다 예보 생성 → `surge_predictions` → `/heatmap`, `/places/{id}` |
+| `backend/services/prediction.py`의 `predict()` → `surge[0/30/60]` 고정값 (0~100) | **AI 예측 모델**. 함수 모양 `predict(base_time, offsets)`는 유지하고 내용만 교체한다 | `realtime_pop_log`(인구·서울시 예측), `demand_events`, `last_trains`, `precip_hourly`(강수 실황·예보), **시간대별 택시 이용건수**(시간대 계수) | 10분마다 예보 생성 → `surge_predictions` → `/heatmap`, `/places/{id}` |
 | `reasons` (고정 문구) | 예측에 크게 작용한 요인으로 이유 문장을 만든다 (예: "21:30 공연 종료 · 약 12,000명", "막차 이후 체류 인구 증가") | AI 모듈 출력 | `surge_predictions.reasons` |
 | `generatedAt` (요청 시각) | 실제 예보 생성 시각 | 예보 예약 작업 | 프런트의 20분 신선도 판정에 쓰이므로 정확해야 한다. 생성에 실패하면 직전 예보를 유지한다 |
 | `backend/services/demand.py` 구간 경계 (지수 70/40, 인구 3만/1.5만) | 확정된 급증 판정 기준 | **심야 승차난 지점**, **택시 OD 상위 10개소**로 적중률을 검증하며 보정한다 | `/config`로 내려주면 프런트에 값을 고정하지 않아도 된다 |
@@ -242,7 +247,7 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 8. **DB 용량**: 인구 로그가 한 달 약 500MB. Supabase 유료 플랜 / 오래된 로그 정리(예: 90일 지난 행의 `seoul_forecast` 비우기) / 수집 주기 조정
 
 확정된 사항:
-- 강수 등 기상 데이터는 수집하지 않는다 (2026-11-20)
+- 기상청 시간별 강수를 수집한다 (2026-11-24. 2026-11-20의 "기상 데이터는 수집하지 않는다"를 바꿈, 8.11)
 - 수집 데이터는 Supabase에 저장하고, 자동 수집은 GitHub Actions 예약 작업으로 돌린다 (2026-11-23, 1장 "수집 실행 환경")
 
 ---
@@ -563,3 +568,50 @@ v1 "예상 시급 지도"용 목업은 v2 주제와 맞지 않으므로 실데�
 - 인천공항 승객예고: [공공데이터포털 15095066](https://www.data.go.kr/data/15095066/openapi.do), [인천공항 입국 승객 예고 안내](https://www.airport.kr/ap_ko/883/subview.do)
 - KOPIS: [KOPIS 오픈API 가이드](https://kopis.or.kr/por/cs/openapi/openApiList.do?menuId=MNU_00074)
 - 표준노드링크: [국토교통부고시 제2023-22호](https://www.codil.or.kr/filebank/moct2014//202301/MOCT3000_0.PDF?nserialno=3000), [공공데이터포털 15025526](https://www.data.go.kr/data/15025526/fileData.do)
+- 기상청 강수: [공공데이터포털 15084084](https://www.data.go.kr/data/15084084/openapi.do) (2026-11-24, 서비스 주소·요청 변수·발표 시각 형식 확인)
+
+### 8.11 기상청 시간별 강수 (1시간 수집) 📄 문서 확인 · 오퍼레이션 경로·값 범주 ⚠️
+
+- 출처: [공공데이터포털 15084084 기상청_단기예보 ((구)_동네예보) 조회서비스](https://www.data.go.kr/data/15084084/openapi.do)
+- 요청: `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst`(초단기실황), `.../getUltraSrtFcst`(초단기예보). 오퍼레이션 경로는 데이터셋 페이지에 없어 ⚠️ 활용가이드로 확인
+- 요청 변수: `serviceKey`, `pageNo`, `numOfRows`, `dataType`(`JSON`), `base_date`(`YYYYMMDD`), `base_time`, `nx`, `ny`. 실황 `base_time`은 정시(`1400`), 초단기예보는 30분 단위(`1430`) 📄
+- 제공 시각: 실황은 매시 40분 이후, 초단기예보는 매시 45분 이후 ⚠️ (활용가이드 기준, 데이터셋 페이지에는 없음). 그래서 매시 50분에 돌고, 실행 시각에서 받을 수 있는 발표 시각을 거꾸로 계산한다
+- 호출 한도: 데이터셋 페이지에 표기 없음 ⚠️. 1회 실행 호출 수 = 격자 수 × (실황 3 + 예보 1)
+- 단기예보(최대 3일, `getVilageFcst`)는 받지 않는다. 예보 범위가 0/30/60분이라 초단기예보 6시간이면 충분하다
+
+장소 연결: 강수는 장소가 아니라 **5km 격자** 단위로 온다.
+
+| 단계 | 규칙 |
+|---|---|
+| 장소 → 격자 | `places` 트리거가 대표점(`lat`, `lng`)을 기상청 Lambert 변환식(`kma_grid()`)으로 바꿔 `kma_nx`, `kma_ny`에 넣는다. 서울시청 (37.5665, 126.9780) → (60, 127) |
+| 수집 대상 | `weather_grids` 뷰 = 활성 장소들의 격자를 중복 없이 모은 목록. 121곳은 서로 가까워서 격자 수가 장소 수보다 훨씬 적다 |
+| 장소별 강수 | `places`와 `precip_hourly`(또는 `latest_precip` 뷰)를 `(kma_nx, kma_ny) = (nx, ny)`로 조인 |
+
+| 원본 필드 | 변환 | `precip_hourly` 컬럼 |
+|---|---|---|
+| (요청한 격자) | 그대로 | `nx`, `ny` |
+| 실황 / 예보 | `obs` / `fcst` | `kind` |
+| 실황 `baseDate`+`baseTime` | KST. 그 시각까지 1시간 누적 강수 | `target_at` = `base_at` |
+| 예보 `fcstDate`+`fcstTime` | KST. 예보 대상 1시간 | `target_at` |
+| 예보 `baseDate`+`baseTime` | KST. 발표 시각 | `base_at` |
+| `RN1` (`obsrValue`·`fcstValue`) | 아래 규칙으로 mm 숫자 | `rain_mm` |
+| `RN1` 원문 | 그대로 | `rain_text` |
+| `PTY` | 0~7 정수, 범위 밖이면 `null` | `pty` (0 없음, 1 비, 2 비/눈, 3 눈, 5 빗방울, 6 빗방울눈날림, 7 눈날림) |
+| `RN1`·`PTY` 원문 | `{"RN1": ..., "PTY": ...}` | `raw` (전체 응답은 행이 많아 저장하지 않는다) |
+
+`RN1` → `rain_mm` 규칙. 실황은 실수로 온다(📄 "RN1 … 실수로 제공"). 예보는 범주 문자열로 오는데 범주 표기는 ⚠️ 첫 실제 응답으로 확인한다.
+
+| 원문 | `rain_mm` |
+|---|---|
+| `강수없음` | 0 |
+| `1mm 미만` | 0.5 |
+| `2.0mm` 등 숫자 | 그 값 |
+| `30.0~50.0mm` | 40.0 (구간 가운데) |
+| `50.0mm 이상` | 50.0 |
+| 결측(±900 이상, `-998.9` 등), 읽을 수 없는 값 | `null` |
+
+- 유니크 키: `(nx, ny, kind, target_at, base_at)`. 같은 시각의 예보도 **발표마다 따로 쌓는다**. 학습·검증 때 "그 시점에 알 수 있던 예보"를 쓰기 위해서다. 최신 발표값만 필요하면 `latest_precip` 뷰를 쓴다
+- 저장: 수집 스크립트가 `record_precip(rows)`를 호출한다. 결측 행은 같은 키의 정상값을 덮어쓰지 않는다
+- 실황은 실행마다 최근 3시간(`WEATHER_NCST_HOURS`)을 다시 받는다. 예약 실행이 건너뛰어도 다음 실행이 빈 시각을 채운다
+- 용량: 하루 행 수 ≈ 격자 수 × 24 × (예보 6 + 실황 1). 격자 50개면 하루 약 8,400행, 한 행 약 200B라 하루 약 2MB
+
