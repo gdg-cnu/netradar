@@ -18,6 +18,7 @@ from collectors.weather import (
     parse_ncst,
     parse_pty,
     parse_rain,
+    pick_source,
 )
 from collectors.kopis import (
     build_events,
@@ -247,10 +248,11 @@ def test_weather_base_times():
     at = lambda h, m: datetime(2026, 11, 24, h, m, tzinfo=KST)
     assert latest_ncst_base(at(14, 50)) == at(14, 0)
     assert latest_ncst_base(at(14, 39)) == at(13, 0)
-    assert latest_fcst_base(at(14, 50)) == at(14, 30)
-    assert latest_fcst_base(at(14, 44)) == at(13, 30)
+    # 초단기예보는 실제로 정시 발표다 (2026-11-24 응답 확인)
+    assert latest_fcst_base(at(14, 50)) == at(14, 0)
+    assert latest_fcst_base(at(14, 29)) == at(13, 0)
     # 자정 직후는 전날 발표
-    assert latest_fcst_base(datetime(2026, 11, 24, 0, 10, tzinfo=KST)) == datetime(2026, 11, 23, 23, 30, tzinfo=KST)
+    assert latest_fcst_base(datetime(2026, 11, 24, 0, 10, tzinfo=KST)) == datetime(2026, 11, 23, 23, 0, tzinfo=KST)
     assert ncst_bases(at(14, 50), 3) == [at(14, 0), at(13, 0), at(12, 0)]
 
 
@@ -296,3 +298,30 @@ def test_weather_api_errors():
     body = json.dumps({"response": {"header": {"resultCode": "03", "resultMsg": "NO_DATA"}}})
     with pytest.raises(RuntimeError, match="03 NO_DATA"):
         weather_extract_items(body)
+    # 미등록 키는 HTTP 403과 함께 JSON 게이트웨이 오류로 온다 (2026-11-24 실제 응답)
+    gateway = json.dumps({"OpenAPI_ServiceResponse": {"cmmMsgHeader": {
+        "errMsg": "SERVICE_KEY_IS_NOT_REGISTERED_ERROR", "returnAuthMsg": "등록되지 않은 서비스키",
+        "returnReasonCode": "30"}}})
+    with pytest.raises(RuntimeError, match="SERVICE_KEY_IS_NOT_REGISTERED_ERROR"):
+        weather_extract_items(gateway)
+    # API허브 인증 오류 (2026-11-24 실제 응답)
+    hub = json.dumps({"result": {"status": 401, "message": "유효한 인증키가 아닙니다."}})
+    with pytest.raises(RuntimeError, match="401 유효한 인증키가 아닙니다"):
+        weather_extract_items(hub)
+
+
+def test_weather_pick_source(monkeypatch):
+    monkeypatch.setenv("KMA_API_KEY", "hubkey")
+    monkeypatch.setenv("DATA_GO_KR_KEY", "portal%2Bkey")
+    source = pick_source()
+    assert (source.key_param, source.key) == ("authKey", "hubkey")
+    assert source.base_url.startswith("https://apihub.kma.go.kr/")
+
+    monkeypatch.delenv("KMA_API_KEY")
+    source = pick_source()
+    assert (source.key_param, source.key) == ("serviceKey", "portal+key")
+    assert source.base_url.startswith("https://apis.data.go.kr/")
+
+    monkeypatch.delenv("DATA_GO_KR_KEY")
+    with pytest.raises(common.MissingConfig):
+        pick_source()
