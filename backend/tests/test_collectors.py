@@ -9,6 +9,16 @@ from collectors import common
 from collectors.airport import extract_items, normalize_key, parse_items
 from collectors.citydata import load_seoul_places, parse_response
 from collectors.common import KST, floor_10min, to_int
+from collectors.weather import (
+    extract_items as weather_extract_items,
+    latest_fcst_base,
+    latest_ncst_base,
+    ncst_bases,
+    parse_fcst,
+    parse_ncst,
+    parse_pty,
+    parse_rain,
+)
 from collectors.kopis import (
     build_events,
     build_sessions,
@@ -210,3 +220,79 @@ def test_build_events():
 
     small = {**venue, "halls": [{"mt13id": "FC1-01", "name": "KSPO DOME(올림픽체조경기장)", "seats": 300}]}
     assert build_events(perf, small, date(2026, 11, 20), date(2026, 11, 27), now, 1000) == ([], None)
+
+
+# --- 기상청 강수 ---
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("강수없음", 0.0), ("1mm 미만", 0.5), ("1.0mm 미만", 0.5), ("2.0mm", 2.0),
+        ("30.0~50.0mm", 40.0), ("50.0mm 이상", 50.0), ("0", 0.0), ("1.5", 1.5),
+        ("-998.9", None), ("900", None), ("", None), (None, None), ("관측불가", None),
+    ],
+)
+def test_parse_rain(value, expected):
+    assert parse_rain(value) == expected
+
+
+def test_parse_pty():
+    assert parse_pty("0") == 0
+    assert parse_pty("3") == 3
+    assert parse_pty("-999") is None
+    assert parse_pty(None) is None
+
+
+def test_weather_base_times():
+    at = lambda h, m: datetime(2026, 11, 24, h, m, tzinfo=KST)
+    assert latest_ncst_base(at(14, 50)) == at(14, 0)
+    assert latest_ncst_base(at(14, 39)) == at(13, 0)
+    assert latest_fcst_base(at(14, 50)) == at(14, 30)
+    assert latest_fcst_base(at(14, 44)) == at(13, 30)
+    # 자정 직후는 전날 발표
+    assert latest_fcst_base(datetime(2026, 11, 24, 0, 10, tzinfo=KST)) == datetime(2026, 11, 23, 23, 30, tzinfo=KST)
+    assert ncst_bases(at(14, 50), 3) == [at(14, 0), at(13, 0), at(12, 0)]
+
+
+def kma_body(items):
+    return json.dumps({"response": {"header": {"resultCode": "00", "resultMsg": "NORMAL_SERVICE"},
+                                    "body": {"dataType": "JSON", "items": {"item": items}}}})
+
+
+def test_parse_ncst():
+    items = weather_extract_items(kma_body([
+        {"baseDate": "20261124", "baseTime": "1400", "category": "PTY", "nx": 60, "ny": 127, "obsrValue": "1"},
+        {"baseDate": "20261124", "baseTime": "1400", "category": "RN1", "nx": 60, "ny": 127, "obsrValue": "2.5"},
+        {"baseDate": "20261124", "baseTime": "1400", "category": "T1H", "nx": 60, "ny": 127, "obsrValue": "8.1"},
+    ]))
+    rows = parse_ncst(items, 60, 127)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["kind"] == "obs"
+    assert row["target_at"] == row["base_at"] == "2026-11-24T14:00:00+09:00"
+    assert (row["rain_mm"], row["rain_text"], row["pty"]) == (2.5, "2.5", 1)
+    assert row["raw"] == {"PTY": "1", "RN1": "2.5"}
+
+
+def test_parse_fcst_groups_by_target():
+    def item(cat, time, value):
+        return {"baseDate": "20261124", "baseTime": "1430", "category": cat,
+                "fcstDate": "20261124", "fcstTime": time, "fcstValue": value, "nx": 60, "ny": 127}
+
+    items = [item("RN1", "1500", "강수없음"), item("PTY", "1500", "0"),
+             item("RN1", "1600", "1mm 미만"), item("PTY", "1600", "1"), item("SKY", "1600", "4")]
+    rows = parse_fcst(items, 60, 127)
+    assert [r["target_at"] for r in rows] == ["2026-11-24T15:00:00+09:00", "2026-11-24T16:00:00+09:00"]
+    assert all(r["base_at"] == "2026-11-24T14:30:00+09:00" and r["kind"] == "fcst" for r in rows)
+    assert [(r["rain_mm"], r["pty"]) for r in rows] == [(0.0, 0), (0.5, 1)]
+
+
+def test_weather_api_errors():
+    with pytest.raises(RuntimeError, match="SERVICE_KEY_IS_NOT_REGISTERED_ERROR"):
+        weather_extract_items(
+            "<OpenAPI_ServiceResponse><cmmMsgHeader><returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR"
+            "</returnAuthMsg></cmmMsgHeader></OpenAPI_ServiceResponse>"
+        )
+    body = json.dumps({"response": {"header": {"resultCode": "03", "resultMsg": "NO_DATA"}}})
+    with pytest.raises(RuntimeError, match="03 NO_DATA"):
+        weather_extract_items(body)
