@@ -65,11 +65,22 @@ jobs:
             script: test:e2e:live
           - suite: v2
             script: test:e2e:v2
+          - suite: server-v2
+            script: test:e2e:v2:server
     defaults:
       run:
         working-directory: front
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        if: matrix.suite == 'server-v2'
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install server V2 API dependencies
+        if: matrix.suite == 'server-v2'
+        run: python -m pip install -r ../backend/requirements.txt
       - uses: actions/setup-node@v4
         with:
           node-version-file: front/.nvmrc

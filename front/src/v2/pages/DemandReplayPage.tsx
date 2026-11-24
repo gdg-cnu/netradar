@@ -9,7 +9,8 @@ type ReplayPoint = { time: string; forecast: number; observed: number | null }
 const formatPeople = (value: number) => `${value.toLocaleString('ko-KR')}명`
 
 function examplePoints(place: DemandPlace): ReplayPoint[] {
-  const base = place.points.find((point) => point.offset === 30)!.population
+  const base = place.points.find((point) => point.offset === 30)?.population
+  if (base == null) return []
   const factors = [0.62, 0.8, 1, 1.08, 0.92, 0.75]
   return factors.map((factor, index) => ({
     time: `${16 + Math.floor(index / 2)}:${index % 2 ? '30' : '00'}`,
@@ -28,7 +29,7 @@ function PopulationComparison({ place, date }: { place: DemandPlace; date: strin
   const points = examplePoints(place)
   const max =
     Math.ceil(
-      Math.max(...points.flatMap((point) => [point.forecast, point.observed ?? 0])) /
+      Math.max(1, ...points.flatMap((point) => [point.forecast, point.observed ?? 0])) /
         1000,
     ) * 1000
   const x = (index: number) => 62 + index * 88

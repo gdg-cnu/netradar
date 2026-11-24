@@ -8,6 +8,8 @@ import DemandMap from '../components/map/DemandMap'
 import EventTimeline from '../components/map/EventTimeline'
 import PlaceDetails from '../components/map/PlaceDetails'
 import SurgeAlerts from '../components/map/SurgeAlerts'
+import ServerDemandExplorer from '../components/map/ServerDemandExplorer'
+import { isV2ServerData } from '../mode'
 import {
   createDemandAlerts,
   demandPoint,
@@ -26,6 +28,10 @@ import type {
 import '../styles/map.css'
 
 export default function DemandMapPage() {
+  return isV2ServerData() ? <ServerDemandExplorer /> : <LocalDemandMapPage />
+}
+
+function LocalDemandMapPage() {
   const [snapshot, setSnapshot] = useState<DemandSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -112,7 +118,8 @@ export default function DemandMapPage() {
       .sort((a, b) =>
         metric === 'surge'
           ? demandPoint(b, offset).surgeIndex - demandPoint(a, offset).surgeIndex
-          : demandPoint(b, offset).population - demandPoint(a, offset).population,
+          : (demandPoint(b, offset).population ?? -1) -
+            (demandPoint(a, offset).population ?? -1),
       )
   }, [snapshot, query, bounds, boundsOnly, metric, offset])
   const events = snapshot ? filterDemandEvents(snapshot, { type: eventType, now }) : []
@@ -362,8 +369,15 @@ export default function DemandMapPage() {
                             <b>
                               {metric === 'surge'
                                 ? point.surgeIndex
-                                : point.population.toLocaleString('ko-KR')}
-                              <small>{metric === 'surge' ? ' / 100' : '명'}</small>
+                                : (point.population?.toLocaleString('ko-KR') ??
+                                  '인구 데이터 없음')}
+                              <small>
+                                {metric === 'surge'
+                                  ? ' / 100'
+                                  : point.population === null
+                                    ? ''
+                                    : '명'}
+                              </small>
                             </b>
                             <span aria-hidden="true">›</span>
                           </button>
