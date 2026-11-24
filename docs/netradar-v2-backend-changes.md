@@ -4,6 +4,7 @@
 - 기준: `netradar-v2-backend-changes(2nd ver).md`(수집 데이터 반영본), `netradar-v2-frontend-changes.md`, `netradar-v2-mock-preview.md`, 현재 `backend/` 코드, `supabase/schema.sql`, v2 프론트 목업 타입(`front/src/v2/types/`)
 - 2nd ver가 참고한 `netradar-v2-backend.md`, `netradar-v2-ai-data.md`, `netradar-v2-data-essentials.md`는 저장소에 없다. 해당 내용은 2nd ver에 정리된 범위만 반영했다
 - 이전 초안 대비 변경: 수집기·실데이터 테이블·예보 예약 작업·AI 모듈 연결 추가, 수집하지 않는 데이터(김포공항, 열차, 기상) 제거, 테이블 이름을 계획 문서와 통일, `supabase/schema.sql` 기준 DB 수정 항목 구체화, 프론트 목업과 달라지는 점 정리(11장)
+- 수정 (2026-11-24): 기상 데이터 중 **기상청 시간별 강수**는 다시 수집하기로 했다. 수집기는 `backend/collectors/weather.py`(1시간), 저장은 `precip_hourly`. 자세한 내용은 [`netradar-v2-data-mapping.md`](netradar-v2-data-mapping.md) 8.11
 - 응답 필드는 프론트 v2 목업과 함께 확정할 **제안안**이다
 - 경로는 모두 `/api/v1` 접두사 기준
 - 진행 상황 (2026-11-19): 14장 순서 3·4의 목업 기반 API(`/heatmap`, `/places/{id}`, `/events`, `/alerts/top`, `/config`) 구현 완료. v1 API는 그대로 둠. `/places/search`는 v1 동선 추천이 쓰는 `MOCK_PLACES`를 계속 검색함 (8.4 작업 때 교체)
@@ -29,7 +30,7 @@
 
 ## 2. 데이터와 백엔드의 연결
 
-8개 데이터 중 백엔드가 다루는 것은 5개다. 검증용 2개와 시간대별 택시 이용건수는 AI 파트가 노트북·설정값으로 처리한다. 기상 데이터는 수집하지 않으므로 날씨 보정은 하지 않는다.
+8개 데이터 중 백엔드가 다루는 것은 5개다. 검증용 2개와 시간대별 택시 이용건수는 AI 파트가 노트북·설정값으로 처리한다. 여기에 2026-11-24 기상청 시간별 강수 수집이 추가됐다(아래 표 마지막 행). 강수로 수요를 어떻게 보정할지는 AI 파트가 정한다.
 
 | 데이터 | 파트 | 백엔드 처리 | 저장 위치 | 쓰는 API |
 |---|---|---|---|---|
@@ -40,6 +41,7 @@
 | 국토부 표준노드링크 | B | AI 모듈이 그래프로 로드, 백엔드는 함수 호출 | AI 모듈 내부 | `/alerts/top`, `/routes/recommend` 이동시간 |
 | 시간대별 택시 이용건수 | A | 없음 (AI 설정값) | - | - |
 | 택시 OD 상위 10개소, 승차난 지점 | A·B | 없음 (검증용) | - | - |
+| 기상청 시간별 강수 | 미정 | 수집기 (1시간) | `precip_hourly` (5km 격자, `places.kma_nx`·`kma_ny`로 연결) | 없음 (AI 입력) |
 
 ---
 
@@ -53,6 +55,7 @@
 | 인천공항 승객예고 | 1시간 | 24 | `demand_events` | 개발 계정 일 1,000건 한도 |
 | KOPIS 공연 | 1일 | 수십 | `demand_events`, `places` | XML 응답. 종료 시각은 공연 시작 + 러닝타임으로 계산, 좌석 수는 공연시설 정보에서 가져옴 |
 | 막차 시각 | 1회 | 수십 | `last_trains` | 서울교통공사 1~9호선 |
+| 기상청 강수 | 1시간 | 격자 수 × 4 × 24 | `precip_hourly` | 초단기실황(최근 3시간) + 초단기예보(6시간). 호출 한도는 활용신청 후 확인 |
 
 - APScheduler로 구현, 실패 시 재시도, 누락은 `is_missing = true`
 - 수집기는 API 서버가 꺼져도 계속 돌아야 하므로 상시 가동 환경에서 실행 (팀 결정 1). API 서버(uvicorn) 프로세스 안에서 돌리면 워커 수만큼 중복 실행되므로 **별도 프로세스**로 띄운다

@@ -5,6 +5,7 @@
 -- v2 실데이터: places / venues / venue_halls / station_places
 --             realtime_pop_log / airport_arrivals / demand_events
 --             last_trains / surge_predictions / collector_runs
+--             precip_hourly (기상청 시간별 강수, 5km 격자 단위)
 --
 -- 여러 번 실행해도 되도록 작성했다 (IF NOT EXISTS, OR REPLACE).
 -- 자동 수집은 GitHub Actions(.github/workflows/collect-*.yml)가 하고,
@@ -402,10 +403,62 @@ CREATE TABLE IF NOT EXISTS public.places (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 기상청 동네예보 격자 (대표점 lat·lng로 트리거가 계산). 강수 데이터와 잇는 키
+ALTER TABLE public.places
+ADD COLUMN IF NOT EXISTS kma_nx SMALLINT;
+
+ALTER TABLE public.places
+ADD COLUMN IF NOT EXISTS kma_ny SMALLINT;
+
 CREATE INDEX IF NOT EXISTS idx_places_geom
 ON public.places USING gist (geom);
 
--- polygon → geom 계산 (꼬인 도형은 ST_MakeValid로 고침), 대표점 계산, updated_at 갱신
+CREATE INDEX IF NOT EXISTS idx_places_kma_grid
+ON public.places (kma_nx, kma_ny);
+
+-- 위경도 → 기상청 5km 격자 (Lambert 정각원추도법, 기상청 단기예보 API 활용가이드의 변환식)
+-- 예: 서울시청(37.5665, 126.9780) → (60, 127)
+CREATE OR REPLACE FUNCTION public.kma_grid(
+    p_lat DOUBLE PRECISION,
+    p_lng DOUBLE PRECISION,
+    OUT nx SMALLINT,
+    OUT ny SMALLINT
+)
+LANGUAGE plpgsql
+IMMUTABLE
+STRICT
+SET search_path = ''
+AS $$
+DECLARE
+    d CONSTANT DOUBLE PRECISION := pi() / 180.0;
+    re CONSTANT DOUBLE PRECISION := 6371.00877 / 5.0;   -- 지구 반경(km) / 격자 간격(km)
+    slat1 CONSTANT DOUBLE PRECISION := 30.0 * d;        -- 표준위도 1
+    slat2 CONSTANT DOUBLE PRECISION := 60.0 * d;        -- 표준위도 2
+    olon CONSTANT DOUBLE PRECISION := 126.0 * d;        -- 기준점 경도
+    olat CONSTANT DOUBLE PRECISION := 38.0 * d;         -- 기준점 위도
+    sn DOUBLE PRECISION;
+    sf DOUBLE PRECISION;
+    ro DOUBLE PRECISION;
+    ra DOUBLE PRECISION;
+    theta DOUBLE PRECISION;
+BEGIN
+    sn := ln(cos(slat1) / cos(slat2))
+        / ln(tan(pi() / 4 + slat2 / 2) / tan(pi() / 4 + slat1 / 2));
+    sf := power(tan(pi() / 4 + slat1 / 2), sn) * cos(slat1) / sn;
+    ro := re * sf / power(tan(pi() / 4 + olat / 2), sn);
+    ra := re * sf / power(tan(pi() / 4 + p_lat * d / 2), sn);
+
+    theta := p_lng * d - olon;
+    IF theta > pi() THEN theta := theta - 2 * pi(); END IF;
+    IF theta < -pi() THEN theta := theta + 2 * pi(); END IF;
+    theta := theta * sn;
+
+    nx := floor(ra * sin(theta) + 43 + 0.5)::SMALLINT;        -- 기준점 X = 43
+    ny := floor(ro - ra * cos(theta) + 136 + 0.5)::SMALLINT;  -- 기준점 Y = 136
+END;
+$$;
+
+-- polygon → geom 계산 (꼬인 도형은 ST_MakeValid로 고침), 대표점 계산, 기상청 격자 계산, updated_at 갱신
 -- 대표점은 lat·lng가 비어 있거나, 폴리곤만 바뀌고 대표점은 그대로일 때 다시 구한다
 -- PostGIS 함수가 내부에서 다른 함수를 스키마 없이 부르므로 search_path에 extensions를 둔다
 CREATE OR REPLACE FUNCTION public.places_before_write()
@@ -437,6 +490,10 @@ BEGIN
         NEW.lng := extensions.ST_X(v_point);
     END IF;
 
+    SELECT g.nx, g.ny
+    INTO NEW.kma_nx, NEW.kma_ny
+    FROM public.kma_grid(NEW.lat, NEW.lng) AS g;
+
     NEW.updated_at := NOW();
     RETURN NEW;
 END;
@@ -449,6 +506,13 @@ BEFORE INSERT OR UPDATE
 ON public.places
 FOR EACH ROW
 EXECUTE FUNCTION public.places_before_write();
+
+-- 격자 컬럼 추가 전에 들어간 장소 채우기 (트리거가 같은 값으로 다시 계산한다)
+UPDATE public.places
+SET kma_nx = (public.kma_grid(lat, lng)).nx,
+    kma_ny = (public.kma_grid(lat, lng)).ny
+WHERE kma_nx IS NULL
+   OR kma_ny IS NULL;
 
 -- 인천공항 터미널 (공식 경계가 없어 터미널 건물 주변을 직접 그린 근사 영역. 필요하면 고친다)
 -- 121곳은 collect-citydata가 backend/collectors/data/seoul_places.json으로 자동 적재한다
@@ -621,6 +685,67 @@ CREATE TABLE IF NOT EXISTS public.last_trains (
 );
 
 
+-- 17-1. 기상청 시간별 강수 (1시간 수집, 기상청 단기예보 조회서비스)
+-- 강수는 장소가 아니라 5km 격자 단위로 온다. 장소와는 places.kma_nx·kma_ny로 잇는다
+--   obs  : 초단기실황 getUltraSrtNcst. 정시 관측, 직전 1시간 강수량(RN1)
+--   fcst : 초단기예보 getUltraSrtFcst. 매시 발표, 앞으로 6시간의 1시간 강수량(RN1)
+-- 같은 시각에 대한 예보가 발표마다 쌓이도록 base_at까지 키에 넣는다 (그때 알 수 있던 예보로 학습·검증)
+CREATE TABLE IF NOT EXISTS public.precip_hourly (
+    nx SMALLINT NOT NULL,
+    ny SMALLINT NOT NULL,
+    kind TEXT NOT NULL
+        CHECK (kind IN ('obs', 'fcst')),
+    target_at TIMESTAMPTZ NOT NULL,     -- obs: 관측 정시(그 직전 1시간 누적) / fcst: fcstDate+fcstTime
+    base_at TIMESTAMPTZ NOT NULL,       -- 발표 시각 baseDate+baseTime (obs는 target_at과 같다)
+
+    rain_mm NUMERIC(5, 1)
+        CHECK (rain_mm >= 0),           -- RN1 숫자화. '강수없음' → 0, 결측(-998.9 등) → NULL
+    rain_text TEXT,                     -- RN1 원문 ('강수없음', '1mm 미만', '30.0~50.0mm' ...)
+    pty SMALLINT
+        CHECK (pty BETWEEN 0 AND 7),    -- 강수형태 0 없음 1 비 2 비/눈 3 눈 5 빗방울 6 빗방울눈날림 7 눈날림
+
+    raw JSONB,
+    collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    PRIMARY KEY (nx, ny, kind, target_at, base_at),
+    CHECK (kind <> 'obs' OR base_at = target_at)
+);
+
+-- 리플레이(시간대별 조회)용
+CREATE INDEX IF NOT EXISTS idx_precip_hourly_target
+ON public.precip_hourly (target_at);
+
+-- 수집할 격자 목록 (활성 장소의 격자를 중복 없이)
+CREATE OR REPLACE VIEW public.weather_grids
+WITH (security_invoker = true)
+AS
+SELECT
+    kma_nx AS nx,
+    kma_ny AS ny,
+    ARRAY_AGG(id ORDER BY id) AS place_ids
+FROM public.places
+WHERE active
+  AND kma_nx IS NOT NULL
+  AND kma_ny IS NOT NULL
+GROUP BY kma_nx, kma_ny;
+
+-- 격자·종류·시각마다 가장 최근 발표값. target_at 조건을 걸어서 쓴다
+CREATE OR REPLACE VIEW public.latest_precip
+WITH (security_invoker = true)
+AS
+SELECT DISTINCT ON (nx, ny, kind, target_at)
+    nx,
+    ny,
+    kind,
+    target_at,
+    base_at,
+    rain_mm,
+    rain_text,
+    pty
+FROM public.precip_hourly
+ORDER BY nx, ny, kind, target_at, base_at DESC;
+
+
 -- 18. 수요 지수 예보 (AI 예약 작업이 10분마다 upsert)
 CREATE TABLE IF NOT EXISTS public.surge_predictions (
     place_id TEXT NOT NULL
@@ -647,7 +772,7 @@ ON public.surge_predictions (base_time DESC);
 -- 19. 수집 실행 기록 (실패 추적용)
 CREATE TABLE IF NOT EXISTS public.collector_runs (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    collector TEXT NOT NULL,            -- collect-citydata / collect-airport / collect-kopis
+    collector TEXT NOT NULL,            -- collect-citydata / collect-airport / collect-kopis / collect-weather
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     finished_at TIMESTAMPTZ,
     status TEXT NOT NULL DEFAULT 'running'
@@ -1042,6 +1167,49 @@ AS $$
     ORDER BY t.train_at;
 $$;
 
+-- 20.8 기상청 강수 저장
+-- 결측 행(rain_mm·pty 모두 NULL)은 같은 키의 정상값을 덮어쓰지 않는다
+CREATE OR REPLACE FUNCTION public.record_precip(p_rows JSONB)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+    v_count INTEGER;
+BEGIN
+    INSERT INTO public.precip_hourly AS p (
+        nx, ny, kind, target_at, base_at, rain_mm, rain_text, pty, raw
+    )
+    SELECT
+        r.nx, r.ny, r.kind, r.target_at, r.base_at,
+        r.rain_mm, r.rain_text, r.pty, r.raw
+    FROM jsonb_to_recordset(p_rows) AS r(
+        nx SMALLINT,
+        ny SMALLINT,
+        kind TEXT,
+        target_at TIMESTAMPTZ,
+        base_at TIMESTAMPTZ,
+        rain_mm NUMERIC,
+        rain_text TEXT,
+        pty SMALLINT,
+        raw JSONB
+    )
+    ON CONFLICT (nx, ny, kind, target_at, base_at) DO UPDATE
+    SET
+        rain_mm = EXCLUDED.rain_mm,
+        rain_text = EXCLUDED.rain_text,
+        pty = EXCLUDED.pty,
+        raw = EXCLUDED.raw,
+        collected_at = NOW()
+    WHERE EXCLUDED.rain_mm IS NOT NULL
+       OR EXCLUDED.pty IS NOT NULL
+       OR (p.rain_mm IS NULL AND p.pty IS NULL);
+
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    RETURN v_count;
+END;
+$$;
+
 
 -- 21. 실데이터 테이블 권한
 -- 서버(service_role)만 읽고 쓴다. Supabase는 public 스키마의 새 테이블에
@@ -1056,24 +1224,31 @@ ALTER TABLE public.demand_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.last_trains ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.surge_predictions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.collector_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.precip_hourly ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON
     public.places, public.venues, public.venue_halls, public.station_places,
     public.realtime_pop_log, public.airport_arrivals, public.demand_events,
     public.last_trains, public.surge_predictions, public.collector_runs,
-    public.latest_population
+    public.precip_hourly,
+    public.latest_population, public.weather_grids, public.latest_precip
 FROM anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON
     public.places, public.venues, public.venue_halls, public.station_places,
     public.realtime_pop_log, public.airport_arrivals, public.demand_events,
-    public.last_trains, public.surge_predictions, public.collector_runs
+    public.last_trains, public.surge_predictions, public.collector_runs,
+    public.precip_hourly
 TO service_role;
 
-GRANT SELECT ON public.latest_population TO service_role;
+GRANT SELECT ON
+    public.latest_population, public.weather_grids, public.latest_precip
+TO service_role;
 
 REVOKE ALL ON FUNCTION
     public.places_before_write(),
+    public.kma_grid(DOUBLE PRECISION, DOUBLE PRECISION),
+    public.record_precip(JSONB),
     public.find_place_at(DOUBLE PRECISION, DOUBLE PRECISION),
     public.record_population(JSONB),
     public.rebuild_airport_events(TEXT, DATE, NUMERIC),
@@ -1084,6 +1259,8 @@ REVOKE ALL ON FUNCTION
 FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION
+    public.kma_grid(DOUBLE PRECISION, DOUBLE PRECISION),
+    public.record_precip(JSONB),
     public.find_place_at(DOUBLE PRECISION, DOUBLE PRECISION),
     public.record_population(JSONB),
     public.rebuild_airport_events(TEXT, DATE, NUMERIC),
