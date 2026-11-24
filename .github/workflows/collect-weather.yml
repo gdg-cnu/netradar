@@ -1,7 +1,8 @@
 # 기상청 시간별 강수 수집 (매시 50분, 초단기실황 최근 3시간 + 초단기예보 6시간)
-# 필요한 Secrets: SUPABASE_URL, SUPABASE_SECRET_KEY, DATA_GO_KR_KEY
-#   (DATA_GO_KR_KEY 계정에 '기상청_단기예보 조회서비스' 활용신청이 승인돼 있어야 한다)
-# 50분에 도는 이유: 실황은 매시 40분, 예보는 매시 45분 이후에 올라온다
+# 필요한 Secrets: SUPABASE_URL, SUPABASE_SECRET_KEY, KMA_API_KEY(기상청 API허브)
+#   KMA_API_KEY가 없으면 DATA_GO_KR_KEY(공공데이터포털)로 호출한다.
+#   이때는 그 계정에 '기상청_단기예보 조회서비스' 활용신청이 승인돼 있어야 한다
+# 50분에 도는 이유: 실황은 매시 40분 이후, 예보(정시 발표)는 30분 안에 올라온다
 name: Collect weather
 
 on:
@@ -35,4 +36,5 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
           DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
