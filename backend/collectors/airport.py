@@ -20,11 +20,10 @@ import logging
 import os
 import re
 from datetime import datetime
-from urllib.parse import unquote
 
 import httpx
 
-from collectors.common import collector_run, get_client, require_env, run_main, to_int
+from collectors.common import collector_run, get_client, normalize_key, require_env, run_main, to_int
 
 COLLECTOR = "collect-airport"
 API_URL = "https://apis.data.go.kr/B551177/passgrAnncmt/getPassgrAnncmt"
@@ -32,11 +31,6 @@ TERMINAL_FIELDS = (("T1", "t1egsum1"), ("T2", "t2egsum1"))  # 입국장 합계
 TIMEOUT = 30.0
 
 log = logging.getLogger(COLLECTOR)
-
-
-def normalize_key(key: str) -> str:
-    """포털의 Encoding 키를 넣어도 되도록 디코딩한다. httpx가 다시 인코딩한다."""
-    return unquote(key) if "%" in key else key
 
 
 def extract_items(body: str) -> list[dict]:
